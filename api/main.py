@@ -2,12 +2,14 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.ratelimit import rate_limiter
 from api.routes import router
 from api.websocket import ws_manager
 from config.settings import settings
+from monitoring.logging_config import setup_logging
 from scheduler.jobs import create_scheduler
 from scripts.seed_sources import seed_sources
 from storage.database import init_db
@@ -19,10 +21,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application startup and shutdown lifecycle."""
     # Startup
-    logging.basicConfig(
-        level=getattr(logging, settings.log_level),
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    )
+    setup_logging(level=settings.log_level, json_format=settings.json_logging)
     logger.info("Starting Logistics News Collector...")
 
     # Initialize database
@@ -59,6 +58,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    # Skip rate limiting for health check and websocket
+    if request.url.path in ("/api/v1/health",) or request.url.path.startswith("/ws"):
+        return await call_next(request)
+    rate_limiter.check(request)
+    return await call_next(request)
+
 
 app.include_router(router, prefix="/api/v1")
 
