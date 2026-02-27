@@ -1,7 +1,7 @@
 """Source discovery engine.
 
 Discovers new logistics news sources via:
-1. Web Search API (Google Custom Search / Bing) for keyword queries
+1. Web search — DuckDuckGo (free, default) or Google CSE (optional)
 2. Seed URL expansion: crawl known sites for outbound links to other news sites
 3. RSS probe: test discovered URLs for RSS/Atom feeds
 
@@ -16,6 +16,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 import yaml
 from bs4 import BeautifulSoup
+from duckduckgo_search import DDGS
 from sqlalchemy import select
 
 from config.settings import settings
@@ -94,9 +95,13 @@ class DiscoveryEngine:
 
         candidates: list[dict] = []
 
-        # Phase 1: Web Search API
-        if settings.discovery_search_api:
-            web_results = await self._search_via_api()
+        # Phase 1: Web search
+        # Use Google CSE if configured, otherwise DuckDuckGo (free, no API key)
+        if settings.discovery_search_api and settings.discovery_search_engine_id:
+            web_results = await self._search_via_google_cse()
+            candidates.extend(web_results)
+        else:
+            web_results = await self._search_via_duckduckgo()
             candidates.extend(web_results)
 
         # Phase 2: Seed URL expansion (crawl outbound links)
@@ -120,24 +125,21 @@ class DiscoveryEngine:
         return saved
 
     # ------------------------------------------------------------------
-    # Phase 1: Web Search API
+    # Phase 1a: DuckDuckGo search (free, no API key required)
     # ------------------------------------------------------------------
 
-    async def _search_via_api(self) -> list[dict]:
-        """Use Google Custom Search API to find new sources."""
-        api_key = settings.discovery_search_api
-        cx = settings.discovery_search_engine_id
-        if not api_key or not cx:
-            logger.info("Discovery: search API not configured, skipping web search")
-            return []
-
+    async def _search_via_duckduckgo(self) -> list[dict]:
+        """Use DuckDuckGo to search for new sources. Free, no API key needed."""
         candidates: list[dict] = []
         queries = self.seeds.get("search_queries", {})
 
         for lang, query_list in queries.items():
+            region = "cn-zh" if lang == "zh" else "us-en"
             for query in query_list[:5]:  # limit queries per run
                 try:
-                    results = await self._google_search(api_key, cx, query, lang)
+                    results = await asyncio.to_thread(
+                        self._ddg_search, query, region
+                    )
                     for r in results:
                         if not _is_blocked(r["url"]):
                             r["discovered_via"] = "web_search"
@@ -145,39 +147,80 @@ class DiscoveryEngine:
                             r["language"] = lang
                             candidates.append(r)
                 except Exception as e:
-                    logger.warning(f"Discovery: web search failed for '{query}': {e}")
-                await asyncio.sleep(1.0)  # rate limit
+                    logger.warning(
+                        f"Discovery: DuckDuckGo search failed for '{query}': {e}"
+                    )
+                await asyncio.sleep(2.0)  # politeness between queries
 
+        logger.info(f"Discovery: DuckDuckGo found {len(candidates)} raw results")
         return candidates
 
-    async def _google_search(
-        self, api_key: str, cx: str, query: str, lang: str
-    ) -> list[dict]:
-        """Call Google Custom Search JSON API and return candidate dicts."""
-        params = {
-            "key": api_key,
-            "cx": cx,
-            "q": query,
-            "num": 10,
-            "lr": f"lang_{lang}",
-        }
-        resp = await self.client.get(
-            "https://www.googleapis.com/customsearch/v1", params=params
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
+    @staticmethod
+    def _ddg_search(query: str, region: str) -> list[dict]:
+        """Synchronous DuckDuckGo search (runs in thread)."""
         results: list[dict] = []
-        for item in data.get("items", []):
-            link = item.get("link", "")
-            parsed = urlparse(link)
-            # Normalize to site root
-            site_url = f"{parsed.scheme}://{parsed.netloc}"
-            results.append({
-                "url": site_url,
-                "name": item.get("title", "")[:200],
-            })
+        with DDGS() as ddgs:
+            for r in ddgs.text(query, region=region, max_results=10):
+                link = r.get("href", "")
+                if not link:
+                    continue
+                parsed = urlparse(link)
+                site_url = f"{parsed.scheme}://{parsed.netloc}"
+                results.append({
+                    "url": site_url,
+                    "name": r.get("title", "")[:200],
+                })
         return results
+
+    # ------------------------------------------------------------------
+    # Phase 1b: Google CSE (optional, requires API key)
+    # ------------------------------------------------------------------
+
+    async def _search_via_google_cse(self) -> list[dict]:
+        """Use Google Custom Search API (requires DISCOVERY_SEARCH_API + ENGINE_ID)."""
+        api_key = settings.discovery_search_api
+        cx = settings.discovery_search_engine_id
+
+        candidates: list[dict] = []
+        queries = self.seeds.get("search_queries", {})
+
+        for lang, query_list in queries.items():
+            for query in query_list[:5]:
+                try:
+                    params = {
+                        "key": api_key,
+                        "cx": cx,
+                        "q": query,
+                        "num": 10,
+                        "lr": f"lang_{lang}",
+                    }
+                    resp = await self.client.get(
+                        "https://www.googleapis.com/customsearch/v1",
+                        params=params,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                    for item in data.get("items", []):
+                        link = item.get("link", "")
+                        parsed = urlparse(link)
+                        site_url = f"{parsed.scheme}://{parsed.netloc}"
+                        if not _is_blocked(site_url):
+                            candidates.append({
+                                "url": site_url,
+                                "name": item.get("title", "")[:200],
+                                "discovered_via": "web_search",
+                                "discovery_query": query,
+                                "language": lang,
+                            })
+                except Exception as e:
+                    logger.warning(
+                        f"Discovery: Google CSE failed for '{query}': {e}"
+                    )
+                await asyncio.sleep(1.0)
+
+        logger.info(f"Discovery: Google CSE found {len(candidates)} raw results")
+        return candidates
 
     # ------------------------------------------------------------------
     # Phase 2: Seed URL expansion
