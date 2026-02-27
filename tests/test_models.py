@@ -142,23 +142,31 @@ class TestFetchLogModelDefaults:
 class TestArticleUuidGeneration:
     """The Article.id default should produce valid UUID4 strings."""
 
+    @staticmethod
+    def _generate_id():
+        """Call the Article.id column default.
+
+        SQLAlchemy wraps the callable so that ``has_arg`` is True and the
+        wrapped version expects a *context* parameter.  We pass ``None``
+        to satisfy that requirement without needing a real execution context.
+        """
+        col = Article.__table__.columns["id"]
+        return col.default.arg(None)
+
     def test_default_generates_uuid_string(self):
         """The id default callable should return a valid UUID4 string."""
-        col = Article.__table__.columns["id"]
-        generated = col.default.arg()
+        generated = self._generate_id()
         # Should be a valid UUID string
         parsed = uuid.UUID(generated)
         assert parsed.version == 4
 
     def test_default_generates_unique_values(self):
         """Each call to the default should produce a unique UUID."""
-        col = Article.__table__.columns["id"]
-        ids = {col.default.arg() for _ in range(100)}
+        ids = {self._generate_id() for _ in range(100)}
         assert len(ids) == 100
 
     def test_uuid_format(self):
         """Generated UUID should be the standard 36-char hyphenated format."""
-        col = Article.__table__.columns["id"]
-        generated = col.default.arg()
+        generated = self._generate_id()
         assert len(generated) == 36
         assert generated.count("-") == 4
