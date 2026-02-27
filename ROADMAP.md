@@ -221,33 +221,47 @@
 
 ---
 
-## Phase 7: Web Dashboard (可视化界面)
+## Phase 7: Web Dashboard (可视化界面) ✅ (已完成)
 
 目标：为非技术用户提供直观的 Web 界面，覆盖新闻浏览、搜索、分析全流程
 
 ### 7.1 技术选型与项目搭建
-- [ ] 前端框架: React / Next.js + TypeScript
-- [ ] UI 组件库: Ant Design / shadcn/ui
-- [ ] 图表库: Recharts / ECharts (趋势、情感、实体图表)
-- [ ] 状态管理: React Query (API 缓存与同步)
-- [ ] 部署: FastAPI StaticFiles 托管 / Nginx 反向代理
+- [x] React 18 + Vite + TypeScript
+- [x] Tailwind CSS (自定义 @theme 主题变量, 暗色模式)
+- [x] Recharts (趋势柱状图, 情感面积图)
+- [x] TanStack Query (React Query v5) 数据缓存与同步
+- [x] FastAPI `StaticFiles` 托管 SPA
 
-### 7.2 核心页面
-- [ ] **新闻 Feed 流** — 按时间线展示文章, 支持 transport_mode / topic / region / urgency 多维筛选
-- [ ] **语义搜索页** — 自然语言输入 → 语义搜索结果 + 相似度可视化
-- [ ] **文章详情页** — 完整正文 + LLM 分析结果 (实体、情感、指标) + 相关文章推荐
-- [ ] **数据源看板** — 各源健康状态、采集频率、成功率实时监控
-- [ ] **趋势分析页** — 热点话题排行、情感时序图、实体关联图 (依赖 Phase 5 API)
-- [ ] **订阅管理页** — 创建/编辑/删除订阅, 通知渠道配置 (依赖 Phase 4 API)
+### 7.2 核心页面 (8 页)
+- [x] **Dashboard 首页** — 4 指标卡 + 热点排行 + 最新文章
+- [x] **新闻 Feed 流** — 10 维筛选 (transport/sentiment/urgency/language/date/search), URL 同步, 分页
+- [x] **语义搜索页** — 自然语言输入 → 语义搜索结果 + 相似度百分比条
+- [x] **文章详情页** — Markdown 正文 + LLM 分析 (实体/情感/指标) + 相关推荐
+- [x] **数据源看板** — 健康状态表格 + 成功率 + 采集日志 (可折叠)
+- [x] **趋势分析页** — 热点话题柱状图 + 情感时序堆叠图 + 实体排行
+- [x] **订阅管理页** — CRUD 表单 (websocket/webhook), 筛选条件, 启用/禁用
+- [x] **设置页** — API Key 管理 (创建/列表/删除) + LLM 配置占位
 
 ### 7.3 实时功能
-- [ ] WebSocket 集成 — 新文章实时弹窗/Badge 通知 (依赖 Phase 4 WebSocket)
-- [ ] 暗色模式切换
-- [ ] 响应式布局 (桌面 + 平板 + 手机)
+- [x] WebSocket 集成 — `useWebSocket` hook, 自动重连, Header Badge 通知
+- [x] 暗色模式切换 (Sun/Moon 图标, localStorage 持久化)
+- [x] 响应式布局 (侧边栏折叠/汉堡菜单, Tailwind 断点)
 
 ### 7.4 数据导出交互
-- [ ] 一键导出当前筛选结果 (CSV / JSON)
-- [ ] 定时报告配置界面
+- [x] 一键导出当前筛选结果 (CSV / JSON) via ExportButton
+- [ ] 定时报告配置界面 (Future)
+
+### 7.5 项目结构
+```
+frontend/
+├── src/
+│   ├── api/          — 6 个 API 模块 (articles, analytics, sources, subscriptions, admin, client)
+│   ├── hooks/        — useWebSocket
+│   ├── components/   — layout(3) + articles(3) + search(1) + common(3)
+│   ├── pages/        — 8 个页面
+│   └── lib/          — utils (cn, formatDate, badges)
+└── vite.config.ts    — proxy /api + /ws to backend
+```
 
 ---
 
@@ -261,6 +275,6 @@
 | **4** ✅ | Real-time & Subscribe | WebSocket + Webhook + 订阅管理 | Phase 1 |
 | **5** ✅ | Analytics & Intelligence | 趋势/情感/实体 + 数据导出 | Phase 3 |
 | **6** ✅ | Production Hardening | 通用爬虫/即时管线/认证/限流/日志/CI/CD/Docker | Phase 4+5 |
-| **7** | Web Dashboard | React 前端 + 新闻浏览/搜索/分析/订阅界面 | Phase 4+5+6 |
+| **7** ✅ | Web Dashboard | React SPA 8 页 + 筛选/导出/暗色模式/实时推送 | Phase 4+5+6 |
 
 > **Note:** Phase 4 和 Phase 5 可并行开发，两者无强依赖。Phase 6 应贯穿始终，但集中加固放在最后。Phase 7 依赖后端 API 就绪，建议 Phase 6 之后启动。
