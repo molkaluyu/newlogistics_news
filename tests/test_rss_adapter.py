@@ -80,13 +80,14 @@ class TestParseDateIso8601:
 
     def test_iso8601_via_feedparser(self):
         """If parsedate_to_datetime fails, feedparser._parse_date is tried."""
-        with patch("feedparser._parse_date") as mock_fp:
-            mock_fp.return_value = (2025, 6, 15, 10, 30, 0, 0, 0, 0)
-            result = _parse_date("2025-06-15T10:30:00Z")
-            # parsedate_to_datetime should handle ISO-like strings; if not,
-            # feedparser fallback kicks in
+        with patch("adapters.rss_adapter.feedparser") as mock_fp:
+            mock_fp._parse_date.return_value = (2025, 6, 15, 10, 30, 0, 0, 0, 0)
+            # Force parsedate_to_datetime to fail so the feedparser branch runs
+            with patch("adapters.rss_adapter.parsedate_to_datetime", side_effect=ValueError):
+                result = _parse_date("2025-06-15T10:30:00Z")
             assert result is not None
             assert result.year == 2025
+            assert result.month == 6
 
 
 class TestParseDateEdgeCases:
@@ -99,7 +100,8 @@ class TestParseDateEdgeCases:
         assert _parse_date("") is None
 
     def test_invalid_string_returns_none(self):
-        with patch("feedparser._parse_date", return_value=None):
+        with patch("adapters.rss_adapter.feedparser") as mock_fp:
+            mock_fp._parse_date.return_value = None
             result = _parse_date("not-a-date-at-all")
             assert result is None
 
