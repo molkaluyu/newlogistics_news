@@ -7,6 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from adapters.base import RawArticle
 from adapters.rss_adapter import RSSAdapter
+from config.llm_settings import llm_settings
 from config.settings import settings
 from monitoring.health import SourceHealthMonitor
 from processing.cleaner import clean_text, clean_title
@@ -186,6 +187,26 @@ async def run_health_check():
     logger.info(f"Health check complete: {len(reports)} sources checked")
 
 
+async def run_llm_processing():
+    """Process pending articles through the LLM pipeline. Called by scheduler."""
+    if not llm_settings.llm_api_key:
+        return  # LLM not configured, skip silently
+
+    from processing.llm_pipeline import ArticleProcessor
+
+    processor = ArticleProcessor()
+    try:
+        summary = await processor.process_pending_batch()
+        if summary["total"] > 0:
+            logger.info(
+                f"LLM processing complete: {summary['success']}/{summary['total']} succeeded"
+            )
+    except Exception as e:
+        logger.error(f"LLM processing batch failed: {e}", exc_info=True)
+    finally:
+        await processor.close()
+
+
 def create_scheduler() -> AsyncIOScheduler:
     """Create and configure the APScheduler with jobs for all enabled sources."""
     scheduler = AsyncIOScheduler()
@@ -225,5 +246,18 @@ def create_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
     logger.info("Scheduled job: health_check every 30min")
+
+    # LLM processing job: process pending articles every 10 minutes
+    if llm_settings.llm_api_key:
+        scheduler.add_job(
+            run_llm_processing,
+            trigger="interval",
+            minutes=10,
+            id="llm_processing",
+            max_instances=1,
+            misfire_grace_time=300,
+            replace_existing=True,
+        )
+        logger.info("Scheduled job: llm_processing every 10min")
 
     return scheduler

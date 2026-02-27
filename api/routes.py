@@ -4,6 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 
+from config.llm_settings import llm_settings
 from monitoring.health import SourceHealthMonitor
 from storage.database import get_session
 from storage.models import Article, FetchLog, Source
@@ -258,3 +259,21 @@ async def list_fetch_logs(
         }
         for log in logs
     ]
+
+
+@router.post("/process")
+async def trigger_llm_processing(
+    batch_size: int = Query(10, ge=1, le=50, description="Number of articles to process"),
+):
+    """Manually trigger LLM processing for pending articles."""
+    if not llm_settings.llm_api_key:
+        raise HTTPException(status_code=503, detail="LLM_API_KEY not configured")
+
+    from processing.llm_pipeline import ArticleProcessor
+
+    processor = ArticleProcessor()
+    try:
+        summary = await processor.process_pending_batch(batch_size=batch_size)
+        return summary
+    finally:
+        await processor.close()

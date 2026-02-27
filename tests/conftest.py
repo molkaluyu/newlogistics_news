@@ -78,78 +78,91 @@ def sample_raw_articles() -> list[RawArticle]:
 # ORM model fixtures (plain Python objects, NOT persisted to any DB)
 # ---------------------------------------------------------------------------
 
-@pytest.fixture
-def sample_source() -> Source:
-    """A Source ORM model instance (not persisted)."""
-    source = Source.__new__(Source)
-    source.source_id = "loadstar_rss"
-    source.name = "The Loadstar"
-    source.type = "rss"
-    source.url = "https://theloadstar.com/feed/"
-    source.language = "en"
-    source.categories = ["ocean", "air", "logistics"]
-    source.fetch_interval_minutes = 30
-    source.parser_config = {}
-    source.scraper_config = {}
-    source.enabled = True
-    source.priority = 1
-    source.last_fetched_at = datetime(2025, 6, 15, 10, 0, 0, tzinfo=timezone.utc)
-    source.health_status = "healthy"
-    source.notes = "Free, frequently updated"
-    source.created_at = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-    return source
+def _make_fake_model(attrs: dict) -> MagicMock:
+    """
+    Create a MagicMock whose attribute access returns the given values.
+
+    This avoids SQLAlchemy's InstrumentedAttribute descriptors that block
+    direct assignment on instances created via ``__new__``.
+    """
+    mock = MagicMock()
+    for key, value in attrs.items():
+        setattr(mock, key, value)
+    return mock
 
 
 @pytest.fixture
-def sample_article() -> Article:
-    """An Article ORM model instance (not persisted)."""
-    article = Article.__new__(Article)
-    article.id = "550e8400-e29b-41d4-a716-446655440000"
-    article.source_id = "loadstar_rss"
-    article.source_name = "The Loadstar"
-    article.url = "https://theloadstar.com/article/supply-chain-crisis"
-    article.title = "Supply chain crisis deepens"
-    article.body_text = "Global supply chains continue to face challenges..."
-    article.body_markdown = "# Supply chain crisis\n\nGlobal supply chains..."
-    article.language = "en"
-    article.published_at = datetime(2025, 6, 15, 10, 30, 0, tzinfo=timezone.utc)
-    article.fetched_at = datetime(2025, 6, 15, 11, 0, 0, tzinfo=timezone.utc)
-    article.summary_en = "Supply chains face major challenges globally."
-    article.summary_zh = None
-    article.transport_modes = ["ocean"]
-    article.primary_topic = "supply_chain_disruption"
-    article.secondary_topics = ["port_congestion"]
-    article.content_type = "news"
-    article.regions = ["global"]
-    article.entities = {"companies": ["Maersk"], "ports": ["Shanghai"]}
-    article.sentiment = "negative"
-    article.market_impact = "high"
-    article.urgency = "high"
-    article.key_metrics = [{"type": "rate_change", "value": "+15%"}]
-    article.embedding = None
-    article.raw_metadata = {"rss_author": "John Doe"}
-    article.processing_status = "completed"
-    article.llm_processed = True
-    article.created_at = datetime(2025, 6, 15, 11, 0, 0, tzinfo=timezone.utc)
-    article.updated_at = datetime(2025, 6, 15, 11, 5, 0, tzinfo=timezone.utc)
-    return article
+def sample_source():
+    """A Source-like object (not persisted)."""
+    return _make_fake_model({
+        "source_id": "loadstar_rss",
+        "name": "The Loadstar",
+        "type": "rss",
+        "url": "https://theloadstar.com/feed/",
+        "language": "en",
+        "categories": ["ocean", "air", "logistics"],
+        "fetch_interval_minutes": 30,
+        "parser_config": {},
+        "scraper_config": {},
+        "enabled": True,
+        "priority": 1,
+        "last_fetched_at": datetime(2025, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+        "health_status": "healthy",
+        "notes": "Free, frequently updated",
+        "created_at": datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+    })
 
 
 @pytest.fixture
-def sample_fetch_log() -> FetchLog:
-    """A FetchLog ORM model instance (not persisted)."""
-    log = FetchLog.__new__(FetchLog)
-    log.id = 1
-    log.source_id = "loadstar_rss"
-    log.started_at = datetime(2025, 6, 15, 10, 0, 0, tzinfo=timezone.utc)
-    log.completed_at = datetime(2025, 6, 15, 10, 0, 5, tzinfo=timezone.utc)
-    log.status = "success"
-    log.articles_found = 10
-    log.articles_new = 7
-    log.articles_dedup = 3
-    log.error_message = None
-    log.duration_ms = 5000
-    return log
+def sample_article():
+    """An Article-like object (not persisted)."""
+    return _make_fake_model({
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "source_id": "loadstar_rss",
+        "source_name": "The Loadstar",
+        "url": "https://theloadstar.com/article/supply-chain-crisis",
+        "title": "Supply chain crisis deepens",
+        "body_text": "Global supply chains continue to face challenges...",
+        "body_markdown": "# Supply chain crisis\n\nGlobal supply chains...",
+        "language": "en",
+        "published_at": datetime(2025, 6, 15, 10, 30, 0, tzinfo=timezone.utc),
+        "fetched_at": datetime(2025, 6, 15, 11, 0, 0, tzinfo=timezone.utc),
+        "summary_en": "Supply chains face major challenges globally.",
+        "summary_zh": None,
+        "transport_modes": ["ocean"],
+        "primary_topic": "supply_chain_disruption",
+        "secondary_topics": ["port_congestion"],
+        "content_type": "news",
+        "regions": ["global"],
+        "entities": {"companies": ["Maersk"], "ports": ["Shanghai"]},
+        "sentiment": "negative",
+        "market_impact": "high",
+        "urgency": "high",
+        "key_metrics": [{"type": "rate_change", "value": "+15%"}],
+        "embedding": None,
+        "raw_metadata": {"rss_author": "John Doe"},
+        "processing_status": "completed",
+        "llm_processed": True,
+        "created_at": datetime(2025, 6, 15, 11, 0, 0, tzinfo=timezone.utc),
+        "updated_at": datetime(2025, 6, 15, 11, 5, 0, tzinfo=timezone.utc),
+    })
+
+
+@pytest.fixture
+def sample_fetch_log():
+    """A FetchLog-like object (not persisted)."""
+    return _make_fake_model({
+        "id": 1,
+        "source_id": "loadstar_rss",
+        "started_at": datetime(2025, 6, 15, 10, 0, 0, tzinfo=timezone.utc),
+        "completed_at": datetime(2025, 6, 15, 10, 0, 5, tzinfo=timezone.utc),
+        "status": "success",
+        "articles_found": 10,
+        "articles_new": 7,
+        "articles_dedup": 3,
+        "error_message": None,
+        "duration_ms": 5000,
+    })
 
 
 # ---------------------------------------------------------------------------
