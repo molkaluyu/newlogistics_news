@@ -4,6 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 
+from monitoring.health import SourceHealthMonitor
 from storage.database import get_session
 from storage.models import Article, FetchLog, Source
 
@@ -37,6 +38,31 @@ async def health_check():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return {"status": "unhealthy", "error": str(e)}
+
+
+@router.get("/health/sources")
+async def source_health():
+    """Check health of all configured data sources."""
+    monitor = SourceHealthMonitor()
+    reports = await monitor.check_all()
+
+    return [
+        {
+            "source_id": r.source_id,
+            "name": r.name,
+            "enabled": r.enabled,
+            "health_status": r.health_status,
+            "last_fetched_at": r.last_fetched_at.isoformat()
+            if r.last_fetched_at
+            else None,
+            "fetch_count_24h": r.fetch_count_24h,
+            "success_rate_24h": r.success_rate_24h,
+            "total_articles_24h": r.total_articles_24h,
+            "avg_duration_ms": r.avg_duration_ms,
+            "alerts": r.alerts,
+        }
+        for r in reports
+    ]
 
 
 @router.get("/sources")

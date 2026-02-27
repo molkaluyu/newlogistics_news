@@ -8,8 +8,10 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from adapters.base import RawArticle
 from adapters.rss_adapter import RSSAdapter
 from config.settings import settings
+from monitoring.health import SourceHealthMonitor
 from processing.cleaner import clean_text, clean_title
 from processing.deduplicator import Deduplicator
+from processing.language import detect_language
 from storage.database import get_session
 from storage.models import Article, FetchLog, Source
 
@@ -105,14 +107,19 @@ async def fetch_source(source_id: str):
 
 def _raw_to_article(raw: RawArticle) -> Article:
     """Convert a RawArticle to an Article database model."""
+    cleaned_body = clean_text(raw.body_text)
+
+    # Detect actual language from article body instead of relying on source config
+    language = detect_language(cleaned_body) if cleaned_body else (raw.language or "en")
+
     return Article(
         source_id=raw.source_id,
         source_name=raw.source_name,
         url=raw.url,
         title=clean_title(raw.title) or raw.title,
-        body_text=clean_text(raw.body_text),
+        body_text=cleaned_body,
         body_markdown=raw.body_markdown,
-        language=raw.language,
+        language=language,
         published_at=raw.published_at,
         fetched_at=raw.fetched_at,
         raw_metadata=raw.raw_metadata,
@@ -164,6 +171,21 @@ async def _update_source_last_fetched(source_id: str):
         logger.error(f"Failed to update source last_fetched_at: {e}")
 
 
+async def run_health_check():
+    """Run health checks on all sources. Called by scheduler."""
+    monitor = SourceHealthMonitor()
+    reports = await monitor.check_all()
+
+    for report in reports:
+        if report.alerts:
+            logger.warning(
+                f"Source {report.source_id} ({report.name}): "
+                f"status={report.health_status}, alerts={report.alerts}"
+            )
+
+    logger.info(f"Health check complete: {len(reports)} sources checked")
+
+
 def create_scheduler() -> AsyncIOScheduler:
     """Create and configure the APScheduler with jobs for all enabled sources."""
     scheduler = AsyncIOScheduler()
@@ -191,5 +213,17 @@ def create_scheduler() -> AsyncIOScheduler:
         logger.info(
             f"Scheduled job: {source['source_id']} every {interval_minutes}min"
         )
+
+    # Health check job: monitor all sources every 30 minutes
+    scheduler.add_job(
+        run_health_check,
+        trigger="interval",
+        minutes=30,
+        id="health_check",
+        max_instances=1,
+        misfire_grace_time=300,
+        replace_existing=True,
+    )
+    logger.info("Scheduled job: health_check every 30min")
 
     return scheduler
