@@ -7,9 +7,12 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from adapters.base import RawArticle
 from adapters.rss_adapter import RSSAdapter
+from config.llm_settings import llm_settings
 from config.settings import settings
+from monitoring.health import SourceHealthMonitor
 from processing.cleaner import clean_text, clean_title
 from processing.deduplicator import Deduplicator
+from processing.language import detect_language
 from storage.database import get_session
 from storage.models import Article, FetchLog, Source
 
@@ -105,14 +108,19 @@ async def fetch_source(source_id: str):
 
 def _raw_to_article(raw: RawArticle) -> Article:
     """Convert a RawArticle to an Article database model."""
+    cleaned_body = clean_text(raw.body_text)
+
+    # Detect actual language from article body instead of relying on source config
+    language = detect_language(cleaned_body) if cleaned_body else (raw.language or "en")
+
     return Article(
         source_id=raw.source_id,
         source_name=raw.source_name,
         url=raw.url,
         title=clean_title(raw.title) or raw.title,
-        body_text=clean_text(raw.body_text),
+        body_text=cleaned_body,
         body_markdown=raw.body_markdown,
-        language=raw.language,
+        language=language,
         published_at=raw.published_at,
         fetched_at=raw.fetched_at,
         raw_metadata=raw.raw_metadata,
@@ -164,6 +172,41 @@ async def _update_source_last_fetched(source_id: str):
         logger.error(f"Failed to update source last_fetched_at: {e}")
 
 
+async def run_health_check():
+    """Run health checks on all sources. Called by scheduler."""
+    monitor = SourceHealthMonitor()
+    reports = await monitor.check_all()
+
+    for report in reports:
+        if report.alerts:
+            logger.warning(
+                f"Source {report.source_id} ({report.name}): "
+                f"status={report.health_status}, alerts={report.alerts}"
+            )
+
+    logger.info(f"Health check complete: {len(reports)} sources checked")
+
+
+async def run_llm_processing():
+    """Process pending articles through the LLM pipeline. Called by scheduler."""
+    if not llm_settings.llm_api_key:
+        return  # LLM not configured, skip silently
+
+    from processing.llm_pipeline import ArticleProcessor
+
+    processor = ArticleProcessor()
+    try:
+        summary = await processor.process_pending_batch()
+        if summary["total"] > 0:
+            logger.info(
+                f"LLM processing complete: {summary['success']}/{summary['total']} succeeded"
+            )
+    except Exception as e:
+        logger.error(f"LLM processing batch failed: {e}", exc_info=True)
+    finally:
+        await processor.close()
+
+
 def create_scheduler() -> AsyncIOScheduler:
     """Create and configure the APScheduler with jobs for all enabled sources."""
     scheduler = AsyncIOScheduler()
@@ -191,5 +234,30 @@ def create_scheduler() -> AsyncIOScheduler:
         logger.info(
             f"Scheduled job: {source['source_id']} every {interval_minutes}min"
         )
+
+    # Health check job: monitor all sources every 30 minutes
+    scheduler.add_job(
+        run_health_check,
+        trigger="interval",
+        minutes=30,
+        id="health_check",
+        max_instances=1,
+        misfire_grace_time=300,
+        replace_existing=True,
+    )
+    logger.info("Scheduled job: health_check every 30min")
+
+    # LLM processing job: process pending articles every 10 minutes
+    if llm_settings.llm_api_key:
+        scheduler.add_job(
+            run_llm_processing,
+            trigger="interval",
+            minutes=10,
+            id="llm_processing",
+            max_instances=1,
+            misfire_grace_time=300,
+            replace_existing=True,
+        )
+        logger.info("Scheduled job: llm_processing every 10min")
 
     return scheduler
