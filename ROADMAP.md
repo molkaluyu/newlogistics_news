@@ -247,6 +247,36 @@
 
 ---
 
+## Phase 7: Web Dashboard (可视化界面)
+
+目标：为非技术用户提供直观的 Web 界面，覆盖新闻浏览、搜索、分析全流程
+
+### 7.1 技术选型与项目搭建
+- [ ] 前端框架: React / Next.js + TypeScript
+- [ ] UI 组件库: Ant Design / shadcn/ui
+- [ ] 图表库: Recharts / ECharts (趋势、情感、实体图表)
+- [ ] 状态管理: React Query (API 缓存与同步)
+- [ ] 部署: FastAPI StaticFiles 托管 / Nginx 反向代理
+
+### 7.2 核心页面
+- [ ] **新闻 Feed 流** — 按时间线展示文章, 支持 transport_mode / topic / region / urgency 多维筛选
+- [ ] **语义搜索页** — 自然语言输入 → 语义搜索结果 + 相似度可视化
+- [ ] **文章详情页** — 完整正文 + LLM 分析结果 (实体、情感、指标) + 相关文章推荐
+- [ ] **数据源看板** — 各源健康状态、采集频率、成功率实时监控
+- [ ] **趋势分析页** — 热点话题排行、情感时序图、实体关联图 (依赖 Phase 5 API)
+- [ ] **订阅管理页** — 创建/编辑/删除订阅, 通知渠道配置 (依赖 Phase 4 API)
+
+### 7.3 实时功能
+- [ ] WebSocket 集成 — 新文章实时弹窗/Badge 通知 (依赖 Phase 4 WebSocket)
+- [ ] 暗色模式切换
+- [ ] 响应式布局 (桌面 + 平板 + 手机)
+
+### 7.4 数据导出交互
+- [ ] 一键导出当前筛选结果 (CSV / JSON)
+- [ ] 定时报告配置界面
+
+---
+
 ## Milestone Summary
 
 | Phase | 名称 | 核心交付 | 预置依赖 |
@@ -257,5 +287,6 @@
 | **4** | Real-time & Subscribe | WebSocket + Webhook + 邮件 + 订阅管理 | Phase 1 |
 | **5** | Analytics & Intelligence | 趋势/情感/实体/聚类 + 数据导出 | Phase 3 |
 | **6** | Production Hardening | 认证/限流/缓存/监控/CI/CD | Phase 4+5 |
+| **7** | Web Dashboard | React 前端 + 新闻浏览/搜索/分析/订阅界面 | Phase 4+5+6 |
 
-> **Note:** Phase 4 可与 Phase 3 并行开发，两者无强依赖。Phase 5 依赖 Phase 3 的语义搜索能力。Phase 6 应贯穿始终，但集中加固放在最后。
+> **Note:** Phase 4 和 Phase 5 可并行开发，两者无强依赖。Phase 6 应贯穿始终，但集中加固放在最后。Phase 7 依赖后端 API 就绪，建议 Phase 6 之后启动。

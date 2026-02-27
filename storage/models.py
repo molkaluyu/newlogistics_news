@@ -144,3 +144,61 @@ class FetchLog(Base):
     articles_dedup: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text)
     duration_ms: Mapped[int | None] = mapped_column(Integer)
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+
+    # Filter criteria (all optional, acts as AND when multiple set)
+    source_ids: Mapped[list | None] = mapped_column(ARRAY(String(100)))
+    transport_modes: Mapped[list | None] = mapped_column(ARRAY(String(50)))
+    topics: Mapped[list | None] = mapped_column(ARRAY(String(100)))
+    regions: Mapped[list | None] = mapped_column(ARRAY(String(50)))
+    urgency_min: Mapped[str | None] = mapped_column(String(20))  # minimum urgency level
+    languages: Mapped[list | None] = mapped_column(ARRAY(String(10)))
+
+    # Notification channel
+    channel: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # websocket / webhook / email
+    channel_config: Mapped[dict | None] = mapped_column(
+        JSONB, default=dict
+    )  # channel-specific config
+
+    # Frequency
+    frequency: Mapped[str] = mapped_column(
+        String(20), default="realtime"
+    )  # realtime / daily / weekly
+
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class WebhookDeliveryLog(Base):
+    __tablename__ = "webhook_delivery_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    subscription_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
+    article_id: Mapped[str] = mapped_column(String(36), nullable=False)
+
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    status_code: Mapped[int | None] = mapped_column(Integer)
+    success: Mapped[bool] = mapped_column(Boolean, default=False)
+    attempt: Mapped[int] = mapped_column(Integer, default=1)
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+    delivered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

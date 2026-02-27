@@ -1,13 +1,19 @@
+import io
 import logging
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select, text
+from starlette.responses import StreamingResponse
 
+from analytics.entity_graph import EntityAnalyzer
+from analytics.export import export_articles_csv, export_articles_json
+from analytics.sentiment import SentimentAnalyzer
+from analytics.trending import TrendingAnalyzer
 from config.llm_settings import llm_settings
 from monitoring.health import SourceHealthMonitor
 from storage.database import get_session
-from storage.models import Article, FetchLog, Source
+from storage.models import Article, FetchLog, Source, Subscription
 
 logger = logging.getLogger(__name__)
 
@@ -371,6 +377,330 @@ async def related_articles(
             for row in rows
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Subscriptions CRUD
+# ---------------------------------------------------------------------------
+
+
+@router.post("/subscriptions", status_code=201)
+async def create_subscription(payload: dict):
+    """Create a new notification subscription."""
+    name = payload.get("name")
+    channel = payload.get("channel")
+    if not name or not channel:
+        raise HTTPException(
+            status_code=422, detail="'name' and 'channel' are required"
+        )
+    if channel not in ("websocket", "webhook", "email"):
+        raise HTTPException(
+            status_code=422,
+            detail="'channel' must be one of: websocket, webhook, email",
+        )
+
+    frequency = payload.get("frequency", "realtime")
+    if frequency not in ("realtime", "daily", "weekly"):
+        raise HTTPException(
+            status_code=422,
+            detail="'frequency' must be one of: realtime, daily, weekly",
+        )
+
+    sub = Subscription(
+        name=name,
+        source_ids=payload.get("source_ids"),
+        transport_modes=payload.get("transport_modes"),
+        topics=payload.get("topics"),
+        regions=payload.get("regions"),
+        urgency_min=payload.get("urgency_min"),
+        languages=payload.get("languages"),
+        channel=channel,
+        channel_config=payload.get("channel_config"),
+        frequency=frequency,
+        enabled=payload.get("enabled", True),
+    )
+
+    async with get_session() as session:
+        session.add(sub)
+        await session.flush()
+        sub_id = sub.id
+
+    return {
+        "id": sub_id,
+        "name": name,
+        "channel": channel,
+        "frequency": frequency,
+        "enabled": sub.enabled,
+    }
+
+
+@router.get("/subscriptions")
+async def list_subscriptions():
+    """List all notification subscriptions."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(Subscription).order_by(Subscription.created_at.desc())
+        )
+        subs = result.scalars().all()
+
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "source_ids": s.source_ids,
+            "transport_modes": s.transport_modes,
+            "topics": s.topics,
+            "regions": s.regions,
+            "urgency_min": s.urgency_min,
+            "languages": s.languages,
+            "channel": s.channel,
+            "channel_config": s.channel_config,
+            "frequency": s.frequency,
+            "enabled": s.enabled,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+        }
+        for s in subs
+    ]
+
+
+@router.get("/subscriptions/{sub_id}")
+async def get_subscription(sub_id: str):
+    """Get a single subscription by ID."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(Subscription).where(Subscription.id == sub_id)
+        )
+        sub = result.scalar_one_or_none()
+
+    if not sub:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+
+    return {
+        "id": sub.id,
+        "name": sub.name,
+        "source_ids": sub.source_ids,
+        "transport_modes": sub.transport_modes,
+        "topics": sub.topics,
+        "regions": sub.regions,
+        "urgency_min": sub.urgency_min,
+        "languages": sub.languages,
+        "channel": sub.channel,
+        "channel_config": sub.channel_config,
+        "frequency": sub.frequency,
+        "enabled": sub.enabled,
+        "created_at": sub.created_at.isoformat() if sub.created_at else None,
+        "updated_at": sub.updated_at.isoformat() if sub.updated_at else None,
+    }
+
+
+@router.put("/subscriptions/{sub_id}")
+async def update_subscription(sub_id: str, payload: dict):
+    """Update an existing subscription."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(Subscription).where(Subscription.id == sub_id)
+        )
+        sub = result.scalar_one_or_none()
+
+        if not sub:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+
+        # Validate channel if provided
+        if "channel" in payload:
+            if payload["channel"] not in ("websocket", "webhook", "email"):
+                raise HTTPException(
+                    status_code=422,
+                    detail="'channel' must be one of: websocket, webhook, email",
+                )
+
+        # Validate frequency if provided
+        if "frequency" in payload:
+            if payload["frequency"] not in ("realtime", "daily", "weekly"):
+                raise HTTPException(
+                    status_code=422,
+                    detail="'frequency' must be one of: realtime, daily, weekly",
+                )
+
+        updatable_fields = [
+            "name",
+            "source_ids",
+            "transport_modes",
+            "topics",
+            "regions",
+            "urgency_min",
+            "languages",
+            "channel",
+            "channel_config",
+            "frequency",
+            "enabled",
+        ]
+        for field in updatable_fields:
+            if field in payload:
+                setattr(sub, field, payload[field])
+
+        await session.flush()
+
+        return {
+            "id": sub.id,
+            "name": sub.name,
+            "source_ids": sub.source_ids,
+            "transport_modes": sub.transport_modes,
+            "topics": sub.topics,
+            "regions": sub.regions,
+            "urgency_min": sub.urgency_min,
+            "languages": sub.languages,
+            "channel": sub.channel,
+            "channel_config": sub.channel_config,
+            "frequency": sub.frequency,
+            "enabled": sub.enabled,
+            "created_at": sub.created_at.isoformat() if sub.created_at else None,
+            "updated_at": sub.updated_at.isoformat() if sub.updated_at else None,
+        }
+
+
+@router.delete("/subscriptions/{sub_id}", status_code=204)
+async def delete_subscription(sub_id: str):
+    """Delete a subscription."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(Subscription).where(Subscription.id == sub_id)
+        )
+        sub = result.scalar_one_or_none()
+
+        if not sub:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+
+        await session.delete(sub)
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Analytics & Intelligence
+# ---------------------------------------------------------------------------
+
+
+@router.get("/analytics/trending")
+async def trending_topics(
+    time_window: str = Query("24h", description="Time window (24h, 7d, 30d)"),
+    transport_mode: str | None = Query(
+        None, description="Filter by transport mode"
+    ),
+    region: str | None = Query(None, description="Filter by region"),
+    limit: int = Query(10, ge=1, le=50, description="Max topics to return"),
+):
+    """Get trending topics ranked by article frequency."""
+    analyzer = TrendingAnalyzer()
+    return await analyzer.get_trending(
+        time_window=time_window,
+        transport_mode=transport_mode,
+        region=region,
+        limit=limit,
+    )
+
+
+@router.get("/analytics/sentiment-trend")
+async def sentiment_trend(
+    granularity: str = Query(
+        "day", description="Time granularity (hour, day, week)"
+    ),
+    transport_mode: str | None = Query(
+        None, description="Filter by transport mode"
+    ),
+    topic: str | None = Query(None, description="Filter by primary topic"),
+    region: str | None = Query(None, description="Filter by region"),
+    days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
+):
+    """Get sentiment distribution over time."""
+    analyzer = SentimentAnalyzer()
+    return await analyzer.get_sentiment_trend(
+        granularity=granularity,
+        transport_mode=transport_mode,
+        topic=topic,
+        region=region,
+        days=days,
+    )
+
+
+@router.get("/analytics/entities")
+async def top_entities(
+    entity_type: str | None = Query(
+        None,
+        description="Entity type (companies, ports, people, organizations)",
+    ),
+    days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
+    limit: int = Query(20, ge=1, le=100, description="Max entities to return"),
+):
+    """Get most frequently mentioned entities."""
+    analyzer = EntityAnalyzer()
+    return await analyzer.get_top_entities(
+        entity_type=entity_type,
+        days=days,
+        limit=limit,
+    )
+
+
+@router.get("/analytics/entities/graph")
+async def entity_graph(
+    days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
+    min_cooccurrence: int = Query(
+        2, ge=1, description="Minimum co-occurrence count"
+    ),
+    limit: int = Query(50, ge=1, le=200, description="Max edges to return"),
+):
+    """Get entity co-occurrence graph."""
+    analyzer = EntityAnalyzer()
+    return await analyzer.get_entity_cooccurrence(
+        days=days,
+        min_cooccurrence=min_cooccurrence,
+        limit=limit,
+    )
+
+
+@router.get("/export/articles")
+async def export_articles(
+    format: str = Query("json", description="Export format (csv, json)"),
+    source_id: str | None = Query(None, description="Filter by source ID"),
+    transport_mode: str | None = Query(
+        None, description="Filter by transport mode"
+    ),
+    topic: str | None = Query(None, description="Filter by primary topic"),
+    language: str | None = Query(None, description="Filter by language"),
+    from_date: datetime | None = Query(
+        None, description="Articles published after"
+    ),
+    to_date: datetime | None = Query(
+        None, description="Articles published before"
+    ),
+):
+    """Export articles as CSV or JSON."""
+    if format == "csv":
+        csv_content = await export_articles_csv(
+            source_id=source_id,
+            transport_mode=transport_mode,
+            topic=topic,
+            language=language,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        return StreamingResponse(
+            io.StringIO(csv_content),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=articles_export.csv"
+            },
+        )
+    else:
+        data = await export_articles_json(
+            source_id=source_id,
+            transport_mode=transport_mode,
+            topic=topic,
+            language=language,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        return data
 
 
 @router.get("/fetch-logs")
