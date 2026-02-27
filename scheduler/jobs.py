@@ -9,6 +9,7 @@ from adapters.base import RawArticle
 from adapters.api_adapter import APIAdapter
 from adapters.rss_adapter import RSSAdapter
 from adapters.scraper_adapter import ScraperAdapter
+from adapters.universal_adapter import UniversalAdapter
 from config.llm_settings import llm_settings
 from config.settings import settings
 from monitoring.health import SourceHealthMonitor
@@ -25,6 +26,7 @@ ADAPTER_MAP = {
     "rss": RSSAdapter,
     "api": APIAdapter,
     "scraper": ScraperAdapter,
+    "universal": UniversalAdapter,
 }
 
 deduplicator = Deduplicator()
@@ -62,6 +64,7 @@ async def fetch_source(source_id: str):
     articles_found = 0
     articles_new = 0
     articles_dedup = 0
+    new_article_ids: list[str] = []
     status = "success"
     error_message = None
 
@@ -80,6 +83,7 @@ async def fetch_source(source_id: str):
                 article = _raw_to_article(raw)
                 async with get_session() as session:
                     session.add(article)
+                new_article_ids.append(article.id)
                 articles_new += 1
 
     except Exception as e:
@@ -108,6 +112,13 @@ async def fetch_source(source_id: str):
         f"found={articles_found}, new={articles_new}, dedup={articles_dedup}, "
         f"status={status}, duration={duration_ms}ms"
     )
+
+    # Trigger immediate LLM processing for new articles
+    if articles_new > 0 and llm_settings.llm_api_key:
+        try:
+            await _process_new_articles(new_article_ids)
+        except Exception as e:
+            logger.warning(f"Immediate LLM processing failed for {source_id}: {e}")
 
 
 def _raw_to_article(raw: RawArticle) -> Article:
@@ -174,6 +185,62 @@ async def _update_source_last_fetched(source_id: str):
             )
     except Exception as e:
         logger.error(f"Failed to update source last_fetched_at: {e}")
+
+
+async def _process_new_articles(article_ids: list[str]):
+    """Process specific articles through LLM immediately after fetch."""
+    if not article_ids:
+        return
+
+    from processing.llm_pipeline import ArticleProcessor
+
+    processor = ArticleProcessor()
+    try:
+        success = 0
+        for article_id in article_ids:
+            if await processor.process_article(article_id):
+                success += 1
+                # After successful LLM processing, dispatch notifications
+                try:
+                    from notifications.dispatcher import NotificationDispatcher
+                    from sqlalchemy import select
+
+                    async with get_session() as session:
+                        result = await session.execute(
+                            select(Article).where(Article.id == article_id)
+                        )
+                        processed_article = result.scalar_one_or_none()
+                        if processed_article:
+                            article_dict = {
+                                "id": processed_article.id,
+                                "source_id": processed_article.source_id,
+                                "source_name": processed_article.source_name,
+                                "url": processed_article.url,
+                                "title": processed_article.title,
+                                "summary_en": processed_article.summary_en,
+                                "summary_zh": processed_article.summary_zh,
+                                "transport_modes": processed_article.transport_modes,
+                                "primary_topic": processed_article.primary_topic,
+                                "regions": processed_article.regions,
+                                "sentiment": processed_article.sentiment,
+                                "market_impact": processed_article.market_impact,
+                                "urgency": processed_article.urgency,
+                                "language": processed_article.language,
+                                "published_at": (
+                                    processed_article.published_at.isoformat()
+                                    if processed_article.published_at
+                                    else None
+                                ),
+                            }
+                            dispatcher = NotificationDispatcher()
+                            await dispatcher.dispatch(article_dict)
+                except Exception as notify_err:
+                    logger.warning(
+                        f"Notification dispatch failed for article {article_id}: {notify_err}"
+                    )
+        logger.info(f"Immediate LLM processing: {success}/{len(article_ids)} succeeded")
+    finally:
+        await processor.close()
 
 
 async def run_health_check():
