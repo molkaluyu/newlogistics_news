@@ -102,88 +102,65 @@
 
 ---
 
-## Phase 4: Real-time Push & Subscriptions (实时推送 + 订阅)
+## Phase 4: Real-time Push & Subscriptions (实时推送 + 订阅) ✅ (已完成)
 
 目标：从 "被动查询" 进化为 "主动推送"，支持用户个性化订阅
 
 ### 4.1 WebSocket 实时推送
-- [ ] `api/websocket.py` — WebSocket 端点
-  - `/ws/articles` 新文章实时推送
-  - 支持按 transport_mode / topic / region 过滤订阅
-  - 连接管理器 (心跳, 重连, 并发连接上限)
-- [ ] 采集管线完成后触发广播
+- [x] `api/websocket.py` — ConnectionManager + WebSocket 端点
+  - `/ws/articles` 新文章实时推送 (带心跳, ping/pong)
+  - 支持按 transport_mode / topic / region / language 过滤订阅
+  - 连接管理器 (最大 100 连接, 自动清理死连接)
+- [x] `notifications/dispatcher.py` 采集管线触发广播
 
 ### 4.2 Webhook 通知
-- [ ] `notifications/webhook.py` — Webhook 推送服务
-  - 用户注册 Webhook URL + 触发条件
-  - HMAC 签名验证
-  - 重试机制 (指数退避, 最多 3 次)
-  - 投递日志记录
-- [ ] Webhook 管理 API (CRUD)
-- [ ] 数据模型: `WebhookSubscription` 表
+- [x] `notifications/webhook.py` — Webhook 推送服务
+  - HMAC-SHA256 签名 (X-Webhook-Signature header)
+  - 重试机制 (指数退避 2/4/8s, 最多 3 次)
+  - 投递日志记录 (WebhookDeliveryLog 表)
+- [x] 订阅 CRUD API (POST/GET/PUT/DELETE /api/v1/subscriptions)
+- [x] 数据模型: Subscription + WebhookDeliveryLog 表
+- [x] Alembic 迁移 003: subscriptions + webhook_delivery_logs
 
-### 4.3 邮件摘要
-- [ ] `notifications/email.py` — 邮件推送服务
-  - 每日/每周摘要邮件 (按用户偏好)
-  - HTML 邮件模板 (Jinja2)
-  - SMTP / SendGrid 集成
-- [ ] 调度器新增邮件摘要定时任务
-
-### 4.4 订阅管理
-- [ ] 数据模型: `Subscription` 表
-  - 订阅条件 (source_ids, topics, regions, transport_modes, urgency)
-  - 通知渠道 (websocket / webhook / email)
-  - 频率设置 (realtime / daily / weekly)
-- [ ] 订阅 CRUD API 端点
+### 4.3 订阅管理
+- [x] Subscription 模型 — 多维过滤条件 (source_ids, transport_modes, topics, regions, languages, urgency)
+- [x] 通知渠道: websocket / webhook (email 留待 Phase 6)
+- [x] 频率设置: realtime / daily / weekly
+- [x] 订阅 CRUD 5 个端点
 
 ---
 
-## Phase 5: Analytics & Intelligence (分析与情报)
+## Phase 5: Analytics & Intelligence (分析与情报) ✅ (已完成)
 
 目标：从 "数据收集" 升级为 "情报平台"，提供趋势分析与市场洞察
 
 ### 5.1 趋势分析
-- [ ] `analytics/trending.py` — 热点话题检测
-  - 基于时间窗口的话题频率统计
-  - 话题突发度计算 (当前频率 / 历史基线)
-  - 话题关联实体聚合
-- [ ] `GET /api/v1/analytics/trending` 端点
-  - 参数: time_window (24h/7d/30d), transport_mode, region
-  - 返回: 话题排名, 频率, 增长率, 代表性文章
+- [x] `analytics/trending.py` — TrendingAnalyzer
+  - 基于时间窗口的话题频率统计 (24h/7d/30d)
+  - 增长率计算 (当前频率 vs 上一同等周期)
+  - 代表性文章关联
+- [x] `GET /api/v1/analytics/trending` 端点
 
 ### 5.2 情感时序分析
-- [ ] `GET /api/v1/analytics/sentiment-trend` 端点
+- [x] `analytics/sentiment.py` — SentimentAnalyzer
+- [x] `GET /api/v1/analytics/sentiment-trend` 端点
   - 按时间粒度 (hour/day/week) 聚合情感分布
   - 支持按运输方式、区域、话题切片
-  - 返回时序数据 (适配前端图表)
-- [ ] 市场情绪指标 — 正面/负面比率 + 移动平均
+  - 情感比率 (positive - negative) / total
 
 ### 5.3 实体知识图谱
-- [ ] `analytics/entity_graph.py` — 实体关系分析
-  - 从 entities JSONB 提取公司、港口、人物共现关系
-  - 实体出现频率排名
-  - 实体关联网络
-- [ ] `GET /api/v1/analytics/entities` 端点
-  - Top-N 实体排名
-  - 实体时序活跃度
-  - 实体关联图 (JSON Graph 格式)
-
-### 5.4 文章聚类
-- [ ] `analytics/clustering.py` — 向量聚类
-  - 基于 embedding 的 K-Means / DBSCAN 聚类
-  - 自动生成聚类标签 (LLM summarize cluster)
-  - 事件检测 (多源报道同一事件)
-- [ ] `GET /api/v1/analytics/clusters` 端点
+- [x] `analytics/entity_graph.py` — EntityAnalyzer
+  - get_top_entities(): 实体频率排名 (按类型筛选)
+  - get_entity_cooccurrence(): 共现关系图 (JSON Graph 格式)
+- [x] `GET /api/v1/analytics/entities` + `/entities/graph` 端点
 
 ### 5.5 数据导出
-- [ ] `GET /api/v1/export/articles` — CSV / JSON 批量导出
-  - 支持全部筛选条件
-  - 流式响应 (StreamingResponse) 处理大数据量
-  - 导出字段可选
-- [ ] `POST /api/v1/reports/schedule` — 定时报告
-  - 配置报告模板 (话题摘要 / 市场情绪 / 实体动态)
-  - 生成频率 (daily / weekly)
-  - 输出格式 (JSON / CSV / PDF)
+- [x] `analytics/export.py` — CSV / JSON 批量导出
+  - 支持全部筛选条件 (source_id, transport_mode, topic, language, date range)
+  - CSV: StreamingResponse (text/csv)
+  - JSON: 标准 JSON 响应
+  - 20 个可选导出字段, 最多 10000 行
+- [x] `GET /api/v1/export/articles` 端点 (format=csv/json)
 
 ---
 
@@ -284,8 +261,8 @@
 | **0+1** ✅ | MVP Foundation | RSS 采集 + LLM 分析 + REST API | — |
 | **2** ✅ | Multi-Source | API/Scraper 适配器 + 中文源 + Alembic | Phase 1 |
 | **3** ✅ | Smart Dedup & Search | SimHash/MinHash + 语义搜索 + 相关推荐 | Phase 2 |
-| **4** | Real-time & Subscribe | WebSocket + Webhook + 邮件 + 订阅管理 | Phase 1 |
-| **5** | Analytics & Intelligence | 趋势/情感/实体/聚类 + 数据导出 | Phase 3 |
+| **4** ✅ | Real-time & Subscribe | WebSocket + Webhook + 订阅管理 | Phase 1 |
+| **5** ✅ | Analytics & Intelligence | 趋势/情感/实体 + 数据导出 | Phase 3 |
 | **6** | Production Hardening | 认证/限流/缓存/监控/CI/CD | Phase 4+5 |
 | **7** | Web Dashboard | React 前端 + 新闻浏览/搜索/分析/订阅界面 | Phase 4+5+6 |
 
