@@ -255,13 +255,74 @@
 ```
 frontend/
 ├── src/
-│   ├── api/          — 6 个 API 模块 (articles, analytics, sources, subscriptions, admin, client)
+│   ├── api/          — 7 个 API 模块 (articles, analytics, sources, subscriptions, discovery, admin, client)
 │   ├── hooks/        — useWebSocket
 │   ├── components/   — layout(3) + articles(3) + search(1) + common(3)
-│   ├── pages/        — 8 个页面
+│   ├── pages/        — 9 个页面
 │   └── lib/          — utils (cn, formatDate, badges)
 └── vite.config.ts    — proxy /api + /ws to backend
 ```
+
+---
+
+## Phase 8: Source Discovery (信息源自动发现) ✅ (已完成)
+
+目标：自动搜索、发现、验证新的物流新闻源，高评分自动入库，支持手动启停
+
+### 8.1 发现引擎
+- [x] `discovery/engine.py` — DiscoveryEngine
+  - DuckDuckGo 免费搜索 (默认, 零配置, 无限调用)
+  - Google Custom Search API (可选, 需 API Key)
+  - 种子 URL 出站链接爬取 (12 个预置种子站点)
+  - 域名去重 + 屏蔽列表 (社交媒体 / 搜索引擎 / 电商)
+- [x] `config/discovery_seeds.yaml` — 种子配置
+  - 25 条搜索关键词 (15 英文 + 10 中文)
+  - 12 个种子 URL (物流/航运行业站点)
+  - 相关性关键词库 (high/medium/low 三级权重)
+
+### 8.2 验证器
+- [x] `discovery/validator.py` — SourceValidator
+  - 连通性检测 (HTTP reachability)
+  - RSS/Atom Feed 探测 (`<link>` 标签 + 常见路径)
+  - 试抓文章 (复用 UniversalAdapter, 最多 5 篇)
+  - 质量评分 (0-100): 标题完整性 / 正文长度 / 发布日期 / URL 规范性
+  - 相关性评分 (0-100): 物流关键词匹配 (中英文独立词库)
+  - 综合评分 = 质量 × 0.4 + 相关性 × 0.6
+  - 站点名称自动提取 (`<title>` 标签解析)
+
+### 8.3 自动审批 + 入库
+- [x] 综合评分 ≥ 75 自动批准 → 写入 Source 表 → 立即参与采集调度
+- [x] `SourceCandidate` 数据模型
+  - 状态流: discovered → validating → validated → approved / rejected
+  - 存储质量/相关性评分、示例文章、验证详情
+- [x] `_promote_to_source()` 自动生成 source_id 并写入源表
+
+### 8.4 调度与控制
+- [x] `discovery/jobs.py` — APScheduler 集成
+  - 发现扫描任务 (默认每 24 小时)
+  - 验证任务 (默认每 2 小时)
+  - 手动启停 API (pause/resume job)
+  - 运行状态追踪 (last_scan_at, total_scans, in_progress)
+- [x] 防重入锁 (scan_in_progress / validate_in_progress)
+
+### 8.5 API 端点 (10 个)
+- [x] `POST /api/v1/discovery/start` — 启动自动发现
+- [x] `POST /api/v1/discovery/stop` — 停止自动发现
+- [x] `GET /api/v1/discovery/status` — 运行状态 + 各阶段计数
+- [x] `POST /api/v1/discovery/scan` — 手动触发发现扫描
+- [x] `POST /api/v1/discovery/validate` — 手动触发验证
+- [x] `GET /api/v1/discovery/candidates` — 候选源列表 (分页/筛选/排序)
+- [x] `POST /api/v1/discovery/candidates/{id}/approve` — 批准 → 写入 Source
+- [x] `POST /api/v1/discovery/candidates/{id}/reject` — 拒绝
+- [x] `POST /api/v1/discovery/probe` — 即时探测任意 URL
+
+### 8.6 前端 Discovery 页面
+- [x] 启停控制 (Start/Stop 按钮 + 运行状态)
+- [x] 5 指标统计卡 (Status / Discovered / Validating / Approved / Rejected)
+- [x] 手动操作 (Run Scan Now / Validate Pending)
+- [x] URL 探测面板 (输入 URL → 即时验证 + 评分 + 示例文章预览)
+- [x] 候选源表格 (状态筛选 / 展开详情 / 一键批准或拒绝)
+- [x] 侧边栏导航 + Header 标题注册
 
 ---
 
@@ -275,6 +336,7 @@ frontend/
 | **4** ✅ | Real-time & Subscribe | WebSocket + Webhook + 订阅管理 | Phase 1 |
 | **5** ✅ | Analytics & Intelligence | 趋势/情感/实体 + 数据导出 | Phase 3 |
 | **6** ✅ | Production Hardening | 通用爬虫/即时管线/认证/限流/日志/CI/CD/Docker | Phase 4+5 |
-| **7** ✅ | Web Dashboard | React SPA 8 页 + 筛选/导出/暗色模式/实时推送 | Phase 4+5+6 |
+| **7** ✅ | Web Dashboard | React SPA 9 页 + 筛选/导出/暗色模式/实时推送 | Phase 4+5+6 |
+| **8** ✅ | Source Discovery | DuckDuckGo 搜索 + 自动验证评分 + 高分自动入库 + 手动启停 | Phase 6+7 |
 
-> **Note:** Phase 4 和 Phase 5 可并行开发，两者无强依赖。Phase 6 应贯穿始终，但集中加固放在最后。Phase 7 依赖后端 API 就绪，建议 Phase 6 之后启动。
+> **Note:** Phase 4 和 Phase 5 可并行开发，两者无强依赖。Phase 6 应贯穿始终，但集中加固放在最后。Phase 7 依赖后端 API 就绪，建议 Phase 6 之后启动。Phase 8 依赖 UniversalAdapter (Phase 6) 和前端框架 (Phase 7)。
