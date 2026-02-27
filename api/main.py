@@ -13,11 +13,20 @@ from api.routes import router
 from api.websocket import ws_manager
 from config.settings import settings
 from monitoring.logging_config import setup_logging
+from discovery.jobs import register_discovery_jobs
 from scheduler.jobs import create_scheduler
 from scripts.seed_sources import seed_sources
 from storage.database import init_db
 
 logger = logging.getLogger(__name__)
+
+# Module-level reference so routes can access the scheduler
+_scheduler = None
+
+
+def get_scheduler():
+    """Return the running scheduler instance."""
+    return _scheduler
 
 
 @asynccontextmanager
@@ -36,13 +45,17 @@ async def lifespan(app: FastAPI):
     logger.info("Sources seeded")
 
     # Start scheduler
+    global _scheduler
     scheduler = create_scheduler()
+    register_discovery_jobs(scheduler)
     scheduler.start()
-    logger.info("Scheduler started")
+    _scheduler = scheduler
+    logger.info("Scheduler started (with discovery jobs)")
 
     yield
 
     # Shutdown
+    _scheduler = None
     scheduler.shutdown(wait=False)
     logger.info("Scheduler stopped")
 

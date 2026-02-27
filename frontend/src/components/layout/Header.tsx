@@ -14,6 +14,7 @@ const pageTitles: Record<string, string> = {
   '/search': 'Semantic Search',
   '/analytics': 'Analytics',
   '/sources': 'Data Sources',
+  '/discovery': 'Source Discovery',
   '/subscriptions': 'Subscriptions',
   '/settings': 'Settings',
 }

@@ -5,6 +5,7 @@ import {
   Search,
   BarChart3,
   Database,
+  Radar,
   Bell,
   Settings,
   Ship,
@@ -17,6 +18,7 @@ const navItems = [
   { label: 'Search', icon: Search, path: '/search' },
   { label: 'Analytics', icon: BarChart3, path: '/analytics' },
   { label: 'Sources', icon: Database, path: '/sources' },
+  { label: 'Discovery', icon: Radar, path: '/discovery' },
   { label: 'Subscriptions', icon: Bell, path: '/subscriptions' },
   { label: 'Settings', icon: Settings, path: '/settings' },
 ] as const

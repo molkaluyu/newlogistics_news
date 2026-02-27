@@ -8,6 +8,7 @@ import AnalyticsPage from '@/pages/AnalyticsPage'
 import SourcesPage from '@/pages/SourcesPage'
 import SubscriptionsPage from '@/pages/SubscriptionsPage'
 import SettingsPage from '@/pages/SettingsPage'
+import DiscoveryPage from '@/pages/DiscoveryPage'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/articles/:id" element={<ArticlePage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/sources" element={<SourcesPage />} />
+        <Route path="/discovery" element={<DiscoveryPage />} />
         <Route path="/subscriptions" element={<SubscriptionsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

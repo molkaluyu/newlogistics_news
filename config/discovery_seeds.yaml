@@ -1,0 +1,135 @@
+# Discovery seeds: keywords and URLs used to find new logistics news sources.
+# The discovery engine uses these as starting points.
+
+# Web search queries (used with search API)
+search_queries:
+  en:
+    - "logistics news RSS feed"
+    - "shipping news RSS"
+    - "freight news feed"
+    - "supply chain news RSS"
+    - "maritime news RSS feed"
+    - "air cargo news RSS"
+    - "container shipping news"
+    - "port news RSS"
+    - "trade news logistics feed"
+    - "ocean freight news site"
+    - "trucking logistics news"
+    - "rail freight news"
+    - "warehousing logistics news"
+    - "3PL news feed"
+    - "global trade news"
+  zh:
+    - "物流新闻 RSS"
+    - "航运新闻网站"
+    - "货运新闻 RSS订阅"
+    - "供应链新闻"
+    - "集装箱航运新闻"
+    - "港口新闻网站"
+    - "空运新闻"
+    - "国际贸易物流新闻"
+    - "快递物流行业新闻"
+    - "冷链物流新闻"
+
+# Seed URLs: known logistics/shipping directories and aggregators to crawl for outbound links
+seed_urls:
+  - url: https://www.maritimeprofessional.com
+    language: en
+    categories: [ocean]
+  - url: https://www.seatrade-maritime.com
+    language: en
+    categories: [ocean]
+  - url: https://www.porttechnology.org
+    language: en
+    categories: [ocean, logistics]
+  - url: https://www.logisticsmgmt.com
+    language: en
+    categories: [logistics]
+  - url: https://www.americanshipper.com
+    language: en
+    categories: [ocean, logistics]
+  - url: https://www.lloydslist.com
+    language: en
+    categories: [ocean]
+  - url: https://www.tradewindsnews.com
+    language: en
+    categories: [ocean]
+  - url: https://www.jctrans.com
+    language: zh
+    categories: [logistics, ocean]
+  - url: https://www.56products.com
+    language: zh
+    categories: [logistics]
+  - url: https://www.ship.sh
+    language: zh
+    categories: [ocean]
+  - url: https://www.cnss.com.cn
+    language: zh
+    categories: [ocean]
+  - url: https://www.zgsyb.com
+    language: zh
+    categories: [ocean, logistics]
+
+# Relevance keywords: used to score whether a discovered source is logistics-related
+relevance_keywords:
+  en:
+    high_weight:  # +10 points each
+      - logistics
+      - shipping
+      - freight
+      - cargo
+      - maritime
+      - container
+      - supply chain
+      - port
+      - vessel
+      - ocean freight
+    medium_weight:  # +5 points each
+      - warehouse
+      - trucking
+      - rail freight
+      - air cargo
+      - customs
+      - trade
+      - intermodal
+      - 3PL
+      - fleet
+      - drayage
+    low_weight:  # +2 points each
+      - import
+      - export
+      - tariff
+      - transport
+      - delivery
+      - distribution
+      - inventory
+      - procurement
+  zh:
+    high_weight:
+      - 物流
+      - 航运
+      - 货运
+      - 集装箱
+      - 供应链
+      - 港口
+      - 海运
+      - 船舶
+    medium_weight:
+      - 仓储
+      - 快递
+      - 空运
+      - 铁路货运
+      - 冷链
+      - 贸易
+      - 报关
+      - 码头
+    low_weight:
+      - 进出口
+      - 关税
+      - 运输
+      - 配送
+      - 采购
+      - 库存
+
+# Auto-approve threshold: candidates scoring above this are auto-approved
+auto_approve_threshold: 75

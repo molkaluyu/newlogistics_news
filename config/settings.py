@@ -24,9 +24,18 @@ class Settings(BaseSettings):
     # Logging
     json_logging: bool = False
 
+    # Discovery
+    discovery_enabled: bool = True
+    discovery_interval_hours: int = 24
+    discovery_max_candidates_per_run: int = 50
+    discovery_auto_approve_threshold: int = 75
+    discovery_search_api: str = ""  # web search API key (Google/Bing)
+    discovery_search_engine_id: str = ""  # Google CSE ID
+
     # Paths
     base_dir: Path = Path(__file__).resolve().parent.parent
     sources_yaml_path: Path = Path(__file__).resolve().parent / "sources.yaml"
+    discovery_seeds_path: Path = Path(__file__).resolve().parent / "discovery_seeds.yaml"
 
     model_config = {
         "env_file": ".env",

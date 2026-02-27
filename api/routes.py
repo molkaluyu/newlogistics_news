@@ -13,7 +13,7 @@ from analytics.trending import TrendingAnalyzer
 from config.llm_settings import llm_settings
 from monitoring.health import SourceHealthMonitor
 from storage.database import get_session
-from storage.models import Article, FetchLog, Source, Subscription
+from storage.models import Article, FetchLog, Source, SourceCandidate, Subscription
 
 logger = logging.getLogger(__name__)
 
@@ -805,6 +805,273 @@ async def delete_api_key(key_id: str):
         if not key:
             raise HTTPException(status_code=404, detail="API key not found")
         await session.delete(key)
+
+
+# ---------------------------------------------------------------------------
+# Source Discovery
+# ---------------------------------------------------------------------------
+
+
+@router.post("/discovery/start")
+async def start_discovery():
+    """Start the automatic source discovery process."""
+    from api.main import get_scheduler
+    from discovery.jobs import start_discovery as _start, get_discovery_status
+
+    scheduler = get_scheduler()
+    if not scheduler:
+        raise HTTPException(status_code=503, detail="Scheduler not available")
+
+    _start(scheduler)
+    return get_discovery_status()
+
+
+@router.post("/discovery/stop")
+async def stop_discovery():
+    """Stop the automatic source discovery process."""
+    from api.main import get_scheduler
+    from discovery.jobs import stop_discovery as _stop, get_discovery_status
+
+    scheduler = get_scheduler()
+    if not scheduler:
+        raise HTTPException(status_code=503, detail="Scheduler not available")
+
+    _stop(scheduler)
+    return get_discovery_status()
+
+
+@router.get("/discovery/status")
+async def discovery_status():
+    """Get current discovery system status."""
+    from discovery.jobs import get_discovery_status
+
+    status = get_discovery_status()
+
+    # Add candidate counts
+    async with get_session() as session:
+        for s in ("discovered", "validating", "validated", "approved", "rejected"):
+            result = await session.execute(
+                select(func.count(SourceCandidate.id)).where(
+                    SourceCandidate.status == s
+                )
+            )
+            status[f"count_{s}"] = result.scalar_one()
+
+    return status
+
+
+@router.post("/discovery/scan")
+async def trigger_discovery_scan():
+    """Manually trigger a discovery scan (one-shot)."""
+    from discovery.engine import DiscoveryEngine
+
+    async with DiscoveryEngine() as engine:
+        result = await engine.run()
+
+    return {
+        "candidates_found": len(result),
+        "candidates": result,
+    }
+
+
+@router.post("/discovery/validate")
+async def trigger_discovery_validate(
+    limit: int = Query(10, ge=1, le=50, description="Max candidates to validate"),
+):
+    """Manually trigger validation of pending candidates."""
+    from discovery.validator import SourceValidator
+
+    async with SourceValidator() as validator:
+        result = await validator.validate_batch(limit=limit)
+
+    return result
+
+
+@router.get("/discovery/candidates")
+async def list_candidates(
+    status: str | None = Query(None, description="Filter by status"),
+    language: str | None = Query(None, description="Filter by language"),
+    min_quality: int | None = Query(None, ge=0, le=100, description="Min quality score"),
+    sort: str = Query("created_at", description="Sort by: created_at, quality_score, relevance_score"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    """List source candidates with filtering and pagination."""
+    async with get_session() as session:
+        query = select(SourceCandidate)
+
+        if status:
+            query = query.where(SourceCandidate.status == status)
+        if language:
+            query = query.where(SourceCandidate.language == language)
+        if min_quality is not None:
+            query = query.where(SourceCandidate.quality_score >= min_quality)
+
+        # Sort
+        if sort == "quality_score":
+            query = query.order_by(SourceCandidate.quality_score.desc().nullslast())
+        elif sort == "relevance_score":
+            query = query.order_by(SourceCandidate.relevance_score.desc().nullslast())
+        else:
+            query = query.order_by(SourceCandidate.created_at.desc())
+
+        # Count
+        count_q = select(func.count()).select_from(query.subquery())
+        total = (await session.execute(count_q)).scalar_one()
+
+        # Paginate
+        offset = (page - 1) * page_size
+        query = query.offset(offset).limit(page_size)
+
+        result = await session.execute(query)
+        candidates = result.scalars().all()
+
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "pages": (total + page_size - 1) // page_size if total > 0 else 0,
+        "candidates": [
+            {
+                "id": c.id,
+                "url": c.url,
+                "name": c.name,
+                "feed_url": c.feed_url,
+                "source_type": c.source_type,
+                "language": c.language,
+                "categories": c.categories,
+                "discovered_via": c.discovered_via,
+                "discovery_query": c.discovery_query,
+                "status": c.status,
+                "quality_score": c.quality_score,
+                "relevance_score": c.relevance_score,
+                "articles_fetched": c.articles_fetched,
+                "fetch_success": c.fetch_success,
+                "error_message": c.error_message,
+                "auto_approved": c.auto_approved,
+                "sample_articles": c.sample_articles,
+                "validation_details": c.validation_details,
+                "created_at": c.created_at.isoformat() if c.created_at else None,
+                "validated_at": c.validated_at.isoformat() if c.validated_at else None,
+            }
+            for c in candidates
+        ],
+    }
+
+
+@router.post("/discovery/candidates/{candidate_id}/approve")
+async def approve_candidate(candidate_id: str):
+    """Approve a validated candidate and promote it to an active source."""
+    from discovery.validator import SourceValidator
+
+    async with get_session() as session:
+        result = await session.execute(
+            select(SourceCandidate).where(SourceCandidate.id == candidate_id)
+        )
+        candidate = result.scalar_one_or_none()
+
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    if candidate.status == "approved":
+        raise HTTPException(status_code=409, detail="Candidate already approved")
+
+    async with SourceValidator() as validator:
+        await validator._promote_to_source(
+            candidate,
+            candidate.name,
+            candidate.feed_url,
+            candidate.source_type or "universal",
+        )
+
+    # Update candidate status
+    async with get_session() as session:
+        from sqlalchemy import update
+        from datetime import datetime
+
+        await session.execute(
+            update(SourceCandidate)
+            .where(SourceCandidate.id == candidate_id)
+            .values(status="approved", reviewed_at=datetime.utcnow())
+        )
+
+    return {"id": candidate_id, "status": "approved", "message": "Source created successfully"}
+
+
+@router.post("/discovery/candidates/{candidate_id}/reject")
+async def reject_candidate(candidate_id: str):
+    """Reject a candidate source."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(SourceCandidate).where(SourceCandidate.id == candidate_id)
+        )
+        candidate = result.scalar_one_or_none()
+
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    async with get_session() as session:
+        from sqlalchemy import update
+        from datetime import datetime
+
+        await session.execute(
+            update(SourceCandidate)
+            .where(SourceCandidate.id == candidate_id)
+            .values(status="rejected", reviewed_at=datetime.utcnow())
+        )
+
+    return {"id": candidate_id, "status": "rejected"}
+
+
+@router.post("/discovery/probe")
+async def probe_url(payload: dict):
+    """Manually probe a single URL to check if it's a valid news source.
+
+    Accepts: {"url": "https://example.com"}
+    """
+    url = payload.get("url")
+    if not url:
+        raise HTTPException(status_code=422, detail="'url' is required")
+
+    from discovery.validator import SourceValidator
+
+    async with SourceValidator() as validator:
+        # Create a temporary candidate-like object for validation
+        reachable, html, final_url = await validator._check_connectivity(url)
+        if not reachable:
+            return {
+                "url": url,
+                "reachable": False,
+                "error": "Site unreachable",
+            }
+
+        site_name = validator._extract_site_name(html, url)
+        feed_url = await validator._probe_feed(url, html)
+        articles, fetch_error = await validator._trial_fetch(url, site_name, None)
+
+        quality = validator._score_quality(articles) if articles else 0
+        relevance = validator._score_relevance(articles, "en") if articles else 0
+
+        return {
+            "url": url,
+            "final_url": final_url,
+            "reachable": True,
+            "name": site_name,
+            "feed_url": feed_url,
+            "source_type": "rss" if feed_url else "universal",
+            "articles_fetched": len(articles),
+            "quality_score": quality,
+            "relevance_score": relevance,
+            "combined_score": int(quality * 0.4 + relevance * 0.6),
+            "sample_articles": [
+                {
+                    "title": a.get("title", "")[:200],
+                    "url": a.get("url", ""),
+                    "body_preview": (a.get("body_text") or "")[:300],
+                }
+                for a in articles[:3]
+            ],
+            "fetch_error": fetch_error,
+        }
 
 
 @router.post("/process")

@@ -204,6 +204,59 @@ class WebhookDeliveryLog(Base):
     )
 
 
+class SourceCandidate(Base):
+    """Discovered source candidate pending validation and approval."""
+
+    __tablename__ = "source_candidates"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    url: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(200))
+    feed_url: Mapped[str | None] = mapped_column(Text)
+    source_type: Mapped[str] = mapped_column(
+        String(20), default="universal"
+    )  # rss / scraper / universal
+    language: Mapped[str | None] = mapped_column(String(10))
+    categories: Mapped[list | None] = mapped_column(ARRAY(String(100)), default=list)
+    regions: Mapped[list | None] = mapped_column(ARRAY(String(50)), default=list)
+
+    # Discovery metadata
+    discovered_via: Mapped[str | None] = mapped_column(
+        String(50)
+    )  # web_search / seed_expansion / outbound_link
+    discovery_query: Mapped[str | None] = mapped_column(Text)
+
+    # Validation results
+    status: Mapped[str] = mapped_column(
+        String(20), default="discovered"
+    )  # discovered / validating / validated / approved / rejected
+    quality_score: Mapped[int | None] = mapped_column(Integer)  # 0-100
+    relevance_score: Mapped[int | None] = mapped_column(Integer)  # 0-100
+    validation_details: Mapped[dict | None] = mapped_column(JSONB, default=dict)
+    sample_articles: Mapped[list | None] = mapped_column(
+        JSONB, default=list
+    )  # preview of fetched articles
+    articles_fetched: Mapped[int] = mapped_column(Integer, default=0)
+    fetch_success: Mapped[bool | None] = mapped_column(Boolean)
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+    # Auto-approve threshold
+    auto_approved: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index("idx_candidates_status", "status"),
+        Index("idx_candidates_quality", "quality_score"),
+    )
+
+
 class APIKey(Base):
     __tablename__ = "api_keys"
 
