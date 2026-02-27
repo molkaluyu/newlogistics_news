@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     default_fetch_timeout_seconds: int = 30
     max_articles_per_fetch: int = 50
 
+    # Rate limiting
+    rate_limit_rpm: int = 120
+
+    # Logging
+    json_logging: bool = False
+
     # Paths
     base_dir: Path = Path(__file__).resolve().parent.parent
     sources_yaml_path: Path = Path(__file__).resolve().parent / "sources.yaml"

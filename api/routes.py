@@ -738,6 +738,75 @@ async def list_fetch_logs(
     ]
 
 
+# ---------------------------------------------------------------------------
+# API Key Management (Admin)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/admin/api-keys")
+async def create_api_key(
+    name: str = Query(..., description="Name for this API key"),
+    role: str = Query("reader", description="Role: admin or reader"),
+):
+    """Create a new API key. Returns the key only once."""
+    from api.auth import generate_api_key, hash_api_key
+    from storage.models import APIKey
+
+    raw_key = generate_api_key()
+    key_hash = hash_api_key(raw_key)
+
+    api_key = APIKey(name=name, key_hash=key_hash, role=role)
+    async with get_session() as session:
+        session.add(api_key)
+
+    return {
+        "id": api_key.id,
+        "name": name,
+        "role": role,
+        "api_key": raw_key,  # Only shown once!
+        "message": "Save this key - it cannot be retrieved again",
+    }
+
+
+@router.get("/admin/api-keys")
+async def list_api_keys():
+    """List all API keys (without revealing the actual keys)."""
+    from storage.models import APIKey
+
+    async with get_session() as session:
+        result = await session.execute(
+            select(APIKey).order_by(APIKey.created_at.desc())
+        )
+        keys = result.scalars().all()
+
+    return [
+        {
+            "id": k.id,
+            "name": k.name,
+            "role": k.role,
+            "enabled": k.enabled,
+            "created_at": k.created_at.isoformat() if k.created_at else None,
+            "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
+        }
+        for k in keys
+    ]
+
+
+@router.delete("/admin/api-keys/{key_id}", status_code=204)
+async def delete_api_key(key_id: str):
+    """Delete an API key."""
+    from storage.models import APIKey
+
+    async with get_session() as session:
+        result = await session.execute(
+            select(APIKey).where(APIKey.id == key_id)
+        )
+        key = result.scalar_one_or_none()
+        if not key:
+            raise HTTPException(status_code=404, detail="API key not found")
+        await session.delete(key)
+
+
 @router.post("/process")
 async def trigger_llm_processing(
     batch_size: int = Query(10, ge=1, le=50, description="Number of articles to process"),
