@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from config.llm_settings import llm_settings
 from monitoring.health import SourceHealthMonitor
@@ -223,6 +223,153 @@ async def get_article(article_id: str):
         "processing_status": article.processing_status,
         "llm_processed": article.llm_processed,
         "raw_metadata": article.raw_metadata,
+    }
+
+
+@router.get("/articles/search/semantic")
+async def semantic_search(
+    q: str = Query(..., description="Natural language search query"),
+    transport_mode: str | None = Query(None, description="Filter by transport mode"),
+    topic: str | None = Query(None, description="Filter by primary topic"),
+    language: str | None = Query(None, description="Filter by language"),
+    limit: int = Query(10, ge=1, le=50, description="Max results"),
+):
+    """Semantic search using vector similarity.
+
+    Converts the query to an embedding and finds the most similar articles
+    using pgvector cosine distance (via HNSW index).
+    """
+    if not llm_settings.llm_api_key:
+        raise HTTPException(status_code=503, detail="LLM_API_KEY not configured")
+
+    from processing.llm_pipeline import ArticleProcessor
+
+    processor = ArticleProcessor()
+    try:
+        query_embedding = await processor.generate_embedding(q)
+    except Exception as e:
+        logger.error(f"Embedding generation failed: {e}")
+        raise HTTPException(status_code=502, detail="Failed to generate query embedding")
+    finally:
+        await processor.close()
+
+    async with get_session() as session:
+        # Build base query with cosine distance
+        cosine_dist = Article.embedding.cosine_distance(query_embedding)
+        query = (
+            select(
+                Article,
+                cosine_dist.label("distance"),
+            )
+            .where(Article.embedding.isnot(None))
+            .order_by(cosine_dist)
+        )
+
+        # Apply optional filters
+        if transport_mode:
+            query = query.where(Article.transport_modes.contains([transport_mode]))
+        if topic:
+            query = query.where(Article.primary_topic == topic)
+        if language:
+            query = query.where(Article.language == language)
+
+        query = query.limit(limit)
+        result = await session.execute(query)
+        rows = result.all()
+
+    return {
+        "query": q,
+        "results": [
+            {
+                "id": row.Article.id,
+                "source_id": row.Article.source_id,
+                "source_name": row.Article.source_name,
+                "url": row.Article.url,
+                "title": row.Article.title,
+                "summary_en": row.Article.summary_en,
+                "summary_zh": row.Article.summary_zh,
+                "language": row.Article.language,
+                "published_at": row.Article.published_at.isoformat()
+                if row.Article.published_at
+                else None,
+                "transport_modes": row.Article.transport_modes,
+                "primary_topic": row.Article.primary_topic,
+                "sentiment": row.Article.sentiment,
+                "similarity": round(1.0 - row.distance, 4),
+            }
+            for row in rows
+        ],
+    }
+
+
+@router.get("/articles/{article_id}/related")
+async def related_articles(
+    article_id: str,
+    limit: int = Query(5, ge=1, le=20, description="Max related articles"),
+    exclude_same_source: bool = Query(
+        False, description="Exclude articles from the same source"
+    ),
+):
+    """Find articles related to the given article using vector similarity."""
+    async with get_session() as session:
+        # Fetch the target article's embedding
+        result = await session.execute(
+            select(Article).where(Article.id == article_id)
+        )
+        article = result.scalar_one_or_none()
+
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    if article.embedding is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Article has no embedding (not yet processed by LLM)",
+        )
+
+    target_embedding = list(article.embedding)
+
+    async with get_session() as session:
+        cosine_dist = Article.embedding.cosine_distance(target_embedding)
+        query = (
+            select(
+                Article,
+                cosine_dist.label("distance"),
+            )
+            .where(Article.embedding.isnot(None))
+            .where(Article.id != article_id)
+            .order_by(cosine_dist)
+        )
+
+        if exclude_same_source:
+            query = query.where(Article.source_id != article.source_id)
+
+        query = query.limit(limit)
+        result = await session.execute(query)
+        rows = result.all()
+
+    return {
+        "article_id": article_id,
+        "related": [
+            {
+                "id": row.Article.id,
+                "source_id": row.Article.source_id,
+                "source_name": row.Article.source_name,
+                "url": row.Article.url,
+                "title": row.Article.title,
+                "summary_en": row.Article.summary_en,
+                "summary_zh": row.Article.summary_zh,
+                "language": row.Article.language,
+                "published_at": row.Article.published_at.isoformat()
+                if row.Article.published_at
+                else None,
+                "transport_modes": row.Article.transport_modes,
+                "primary_topic": row.Article.primary_topic,
+                "sentiment": row.Article.sentiment,
+                "similarity": round(1.0 - row.distance, 4),
+            }
+            for row in rows
+        ],
     }
 
 

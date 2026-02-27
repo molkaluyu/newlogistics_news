@@ -260,11 +260,20 @@ class ArticleProcessor:
             embed_input = f"{title}\n\n{body_text[:2000]}"
             embedding = await self.generate_embedding(embed_input)
 
+            # --- Dedup fingerprints ----------------------------------------
+            from processing.simhash import compute_simhash
+            from processing.minhash import compute_minhash
+
+            title_simhash = compute_simhash(title)
+            content_minhash = compute_minhash(body_text)
+
             # --- Persist to DB ----------------------------------------------
             async with get_session() as session:
                 update_values = {
                     **validated,
                     "embedding": embedding,
+                    "title_simhash": title_simhash,
+                    "content_minhash": content_minhash,
                     "processing_status": "completed",
                     "llm_processed": True,
                 }

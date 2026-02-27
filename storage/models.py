@@ -4,6 +4,7 @@ from datetime import datetime
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     ARRAY,
+    BigInteger,
     Boolean,
     DateTime,
     Index,
@@ -86,6 +87,12 @@ class Article(Base):
     urgency: Mapped[str | None] = mapped_column(String(20))
     key_metrics: Mapped[list | None] = mapped_column(JSONB, default=list)
 
+    # Deduplication fingerprints
+    title_simhash: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    content_minhash: Mapped[list | None] = mapped_column(
+        ARRAY(BigInteger), nullable=True
+    )
+
     # Embedding (1024-dim for bge-m3)
     embedding = mapped_column(Vector(1024), nullable=True)
 
@@ -113,6 +120,14 @@ class Article(Base):
         Index("idx_articles_sentiment", "sentiment"),
         Index("idx_articles_urgency", "urgency"),
         Index("idx_articles_status", "processing_status"),
+        Index("idx_articles_title_simhash", "title_simhash"),
+        Index(
+            "idx_articles_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
     )
 
 

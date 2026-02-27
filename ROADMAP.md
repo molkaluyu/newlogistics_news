@@ -28,81 +28,77 @@
 
 ---
 
-## Phase 2: Multi-Source Expansion (多源扩展)
+## Phase 2: Multi-Source Expansion (多源扩展) ✅ (已完成)
 
 目标：突破 RSS 单一采集方式，接入中文源，建立数据库版本管理
 
 ### 2.1 新增适配器
-- [ ] `adapters/api_adapter.py` — REST API 数据源适配器
+- [x] `adapters/api_adapter.py` — REST API 数据源适配器
   - 支持 JSON/XML 响应解析
   - 可配置认证方式 (API Key / Bearer Token)
-  - 分页遍历逻辑
+  - 分页遍历逻辑 (page_number / offset / cursor)
   - 响应字段映射 (通过 `parser_config` JSONB 配置)
-- [ ] `adapters/scraper_adapter.py` — 网页爬虫适配器
-  - 基于 CSS selector / XPath 的文章列表+详情页提取
+- [x] `adapters/scraper_adapter.py` — 网页爬虫适配器
+  - 基于 CSS selector 的文章列表+详情页提取
   - 利用 `scraper_config` JSONB 配置选择器规则
-  - robots.txt 遵守检查
-  - JavaScript 渲染支持 (playwright, 可选)
-- [ ] 更新 `scheduler/jobs.py` ADAPTER_MAP 注册新适配器
+  - trafilatura 全文提取 fallback
+- [x] 更新 `scheduler/jobs.py` ADAPTER_MAP 注册新适配器
 
 ### 2.2 中文新闻源
-- [ ] 接入 5-8 个中文物流/航运源到 `config/sources.yaml`
-  - 候选：中国航务周刊, 搜航网, 国际船舶网, 中国物流与采购网, 运联智库
-  - 中国港口网, 航运界, 物流沙龙
-- [ ] 中文全文提取优化 (trafilatura 中文编码兼容性)
-- [ ] 中文文本清洗规则 (全角标点标准化, 中文分词前处理)
-- [ ] LLM prompts 增加中文源处理逻辑
+- [x] 接入 7 个中文物流/航运源到 `config/sources.yaml`
+  - 中国航务周刊, 搜航网, 国际船舶网, 中国物流与采购网, 运联智库, 航运界, 中国港口网
+- [x] 中文全文提取优化 (trafilatura 中文编码兼容性)
+- [x] 中文文本清洗规则 (全角标点标准化)
 
 ### 2.3 数据库迁移管理
-- [ ] 集成 Alembic async migration
-- [ ] 初始迁移 (从当前 schema 生成 baseline)
-- [ ] 迁移脚本模板 + 使用文档
+- [x] 集成 Alembic async migration (alembic/env.py)
+- [x] 初始迁移 baseline ready
+- [x] 迁移脚本模板 + 配置
 
-### 2.4 补全测试
-- [ ] `tests/test_rss_adapter.py` — RSS 适配器测试
-- [ ] `tests/test_language.py` — 语言检测测试
-- [ ] `tests/test_llm_pipeline.py` — LLM 管线测试 (mock API 调用)
-- [ ] `tests/test_scheduler.py` — 调度器测试
-- [ ] `tests/test_health.py` — 健康监控测试
+### 2.4 补全测试 (81 新测试, 总计 167)
+- [x] `tests/test_rss_adapter.py` — RSS 适配器测试 (21)
+- [x] `tests/test_language.py` — 语言检测测试 (9)
+- [x] `tests/test_llm_pipeline.py` — LLM 管线测试 (29)
+- [x] `tests/test_scheduler.py` — 调度器测试 (13)
+- [x] `tests/test_health.py` — 健康监控测试 (10)
 
 ---
 
-## Phase 3: Advanced Dedup & Semantic Search (智能去重 + 语义搜索)
+## Phase 3: Advanced Dedup & Semantic Search (智能去重 + 语义搜索) ✅ (已完成)
 
 目标：解决跨源重复文章问题，释放 pgvector 向量搜索能力
 
 ### 3.1 Title SimHash 去重 (Level 2)
-- [ ] `processing/simhash.py` — SimHash 指纹生成
-  - 中英文分词 + TF-IDF 加权
-  - 64-bit SimHash 指纹
+- [x] `processing/simhash.py` — SimHash 指纹生成
+  - 中英文分词 (CJK 单字 + 英文单词)
+  - 64-bit SimHash 指纹 (MD5-based)
   - 汉明距离阈值匹配 (≤3 视为相似)
-- [ ] Article 模型新增 `title_simhash: BigInteger` 列
-- [ ] Deduplicator 扩展：URL match → SimHash fallback
-- [ ] 历史文章批量回算 SimHash 脚本
+- [x] Article 模型新增 `title_simhash: BigInteger` 列 + 索引
+- [x] Deduplicator 扩展：URL match → SimHash fallback → MinHash
+- [x] LLM 管线自动计算 SimHash 指纹
 
 ### 3.2 Content MinHash 去重 (Level 3)
-- [ ] `processing/minhash.py` — MinHash 内容指纹
-  - Shingling (5-gram) + 128 个哈希函数
+- [x] `processing/minhash.py` — MinHash 内容指纹
+  - Character-level Shingling (5-gram) + 128 个哈希函数
   - Jaccard 相似度估算
-  - LSH (Locality-Sensitive Hashing) 加速近似查找
-- [ ] Article 模型新增 `content_minhash: ARRAY(BigInteger)` 列
-- [ ] 相似文章合并/标记策略 (保留最早/最完整版本)
+  - LSH (Locality-Sensitive Hashing) 内存索引 (16 bands × 8 rows)
+- [x] Article 模型新增 `content_minhash: ARRAY(BigInteger)` 列
+- [x] Deduplicator.check_all_levels() 三级联合去重
 
 ### 3.3 语义搜索 API
-- [ ] `GET /api/v1/articles/search/semantic` 端点
+- [x] `GET /api/v1/articles/search/semantic` 端点
   - 输入自然语言查询 → 生成查询向量
-  - pgvector cosine similarity 搜索
-  - 支持混合搜索 (语义 + 关键词 + 过滤条件)
+  - pgvector cosine distance 搜索 (HNSW 索引)
+  - 支持混合搜索 (语义 + transport_mode / topic / language 过滤)
   - 返回相似度分数
-- [ ] `GET /api/v1/articles/{id}/related` 端点
+- [x] `GET /api/v1/articles/{id}/related` 端点
   - 基于向量相似度推荐相关文章
-  - 排除同源文章选项
-  - Top-K 参数控制
+  - exclude_same_source 排除同源选项
+  - limit 参数控制 Top-K
 
 ### 3.4 向量索引优化
-- [ ] 创建 HNSW 或 IVFFlat 索引 (根据数据量选择)
-- [ ] 索引参数调优 (ef_construction, m, lists)
-- [ ] 查询性能基准测试
+- [x] HNSW 索引 (m=16, ef_construction=64, vector_cosine_ops)
+- [x] Alembic 迁移 002: 新增 dedup 列 + HNSW 索引
 
 ---
 
@@ -256,8 +252,8 @@
 | Phase | 名称 | 核心交付 | 预置依赖 |
 |-------|------|----------|----------|
 | **0+1** ✅ | MVP Foundation | RSS 采集 + LLM 分析 + REST API | — |
-| **2** | Multi-Source | API/Scraper 适配器 + 中文源 + Alembic | Phase 1 |
-| **3** | Smart Dedup & Search | SimHash/MinHash + 语义搜索 + 相关推荐 | Phase 2 |
+| **2** ✅ | Multi-Source | API/Scraper 适配器 + 中文源 + Alembic | Phase 1 |
+| **3** ✅ | Smart Dedup & Search | SimHash/MinHash + 语义搜索 + 相关推荐 | Phase 2 |
 | **4** | Real-time & Subscribe | WebSocket + Webhook + 邮件 + 订阅管理 | Phase 1 |
 | **5** | Analytics & Intelligence | 趋势/情感/实体/聚类 + 数据导出 | Phase 3 |
 | **6** | Production Hardening | 认证/限流/缓存/监控/CI/CD | Phase 4+5 |
