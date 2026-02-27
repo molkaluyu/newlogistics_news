@@ -146,3 +146,121 @@ sources:
     enabled: true
     priority: 2
     notes: "Dry bulk/tanker, Greek shipowner perspective, free"
+
+  # ── Chinese logistics / shipping sources ──
+
+  - source_id: china_shipping_gazette
+    name: "中国航务周刊 (China Shipping Gazette)"
+    type: scraper
+    url: https://www.csgcn.com.cn/news.html
+    language: zh
+    categories:
+      - ocean
+      - logistics
+    regions:
+      - china
+      - asia
+    fetch_interval_minutes: 60
+    enabled: true
+    priority: 1
+    notes: "Leading Chinese shipping weekly, covers container/bulk/port policy"
+    scraper_config:
+      list_selector: ".news-list a"
+      max_articles: 20
+      note: "Selector to be refined after inspecting live page structure"
+
+  - source_id: sofreight
+    name: "搜航网 (Sofreight)"
+    type: scraper
+    url: https://www.sofreight.com/news
+    language: zh
+    categories:
+      - ocean
+      - air
+      - logistics
+    regions:
+      - china
+      - global
+    fetch_interval_minutes: 60
+    enabled: true
+    priority: 1
+    notes: "Major Chinese freight/logistics news aggregator, high volume"
+    scraper_config:
+      list_selector: ".news-list a"
+      max_articles: 20
+      note: "Selector to be refined after inspecting live page structure"
+
+  - source_id: eworldship
+    name: "国际船舶网 (International Marine)"
+    type: scraper
+    url: https://www.eworldship.com/html/2024/ship_news_index.html
+    language: zh
+    categories:
+      - ocean
+    regions:
+      - china
+      - global
+    fetch_interval_minutes: 60
+    enabled: true
+    priority: 2
+    notes: "Shipbuilding, ship trading, and maritime industry news"
+    scraper_config:
+      list_selector: ".news-list a"
+      max_articles: 20
+      note: "Selector to be refined after inspecting live page structure"
+
+  - source_id: chinawuliu
+    name: "中国物流与采购网 (China Federation of Logistics & Purchasing)"
+    type: scraper
+    url: http://www.chinawuliu.com.cn/xsyj.shtml
+    language: zh
+    categories:
+      - logistics
+    regions:
+      - china
+    fetch_interval_minutes: 60
+    enabled: true
+    priority: 1
+    notes: "Official CFLP site, logistics policy and industry data"
+    scraper_config:
+      list_selector: ".news-list a"
+      max_articles: 20
+      note: "Selector to be refined after inspecting live page structure"
+
+  - source_id: yunlink
+    name: "运联智库 (YunLink)"
+    type: scraper
+    url: https://www.ylzk.cn/news
+    language: zh
+    categories:
+      - logistics
+      - road
+    regions:
+      - china
+    fetch_interval_minutes: 60
+    enabled: true
+    priority: 2
+    notes: "Domestic logistics and road freight intelligence"
+    scraper_config:
+      list_selector: ".news-list a"
+      max_articles: 20
+      note: "Selector to be refined after inspecting live page structure"
+
+  - source_id: shipping_circle
+    name: "航运界 (Shipping Circle)"
+    type: scraper
+    url: https://www.ship.sh/news/list.html
+    language: zh
+    categories:
+      - ocean
+    regions:
+      - china
+      - asia
+    fetch_interval_minutes: 60
+    enabled: true
+    priority: 2
+    notes: "Chinese shipping community news and analysis"
+    scraper_config:
+      list_selector: ".news-list a"
+      max_articles: 20
+      note: "Selector to be refined after inspecting live page structure"

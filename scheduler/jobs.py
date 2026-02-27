@@ -6,7 +6,9 @@ import yaml
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from adapters.base import RawArticle
+from adapters.api_adapter import APIAdapter
 from adapters.rss_adapter import RSSAdapter
+from adapters.scraper_adapter import ScraperAdapter
 from config.llm_settings import llm_settings
 from config.settings import settings
 from monitoring.health import SourceHealthMonitor
@@ -21,6 +23,8 @@ logger = logging.getLogger(__name__)
 # Adapter registry by source type
 ADAPTER_MAP = {
     "rss": RSSAdapter,
+    "api": APIAdapter,
+    "scraper": ScraperAdapter,
 }
 
 deduplicator = Deduplicator()
