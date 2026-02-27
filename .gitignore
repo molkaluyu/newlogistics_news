@@ -27,3 +27,6 @@ Thumbs.db
 
 # Docker volumes
 pgdata/
+
+# Claude Code
+.claude/
