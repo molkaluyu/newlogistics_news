@@ -1,0 +1,148 @@
+sources:
+  - source_id: loadstar_rss
+    name: The Loadstar
+    type: rss
+    url: https://theloadstar.com/feed/
+    language: en
+    categories:
+      - ocean
+      - air
+      - logistics
+    regions:
+      - global
+    fetch_interval_minutes: 30
+    enabled: true
+    priority: 1
+    notes: "Free, frequently updated, one of the most respected independent logistics media"
+
+  - source_id: splash247_rss
+    name: Splash247
+    type: rss
+    url: https://splash247.com/feed/
+    language: en
+    categories:
+      - ocean
+    regions:
+      - global
+    fetch_interval_minutes: 30
+    enabled: true
+    priority: 1
+    notes: "Free registration for full text, 5-10 articles daily"
+
+  - source_id: freightwaves_rss
+    name: FreightWaves
+    type: rss
+    url: https://www.freightwaves.com/feed
+    language: en
+    categories:
+      - ocean
+      - air
+      - logistics
+      - road
+    regions:
+      - north_america
+      - global
+    fetch_interval_minutes: 30
+    enabled: true
+    priority: 1
+    notes: "Strongest US market coverage, SONAR data"
+
+  - source_id: gcaptain_rss
+    name: gCaptain
+    type: rss
+    url: https://gcaptain.com/feed/
+    language: en
+    categories:
+      - ocean
+    regions:
+      - global
+    fetch_interval_minutes: 30
+    enabled: true
+    priority: 2
+    notes: "Shipping accidents/safety/industry"
+
+  - source_id: maritime_executive_rss
+    name: The Maritime Executive
+    type: rss
+    url: https://maritime-executive.com/feed
+    language: en
+    categories:
+      - ocean
+    regions:
+      - global
+    fetch_interval_minutes: 30
+    enabled: true
+    priority: 1
+    notes: "Shipping companies/ports/policy, free"
+
+  - source_id: aircargonews_rss
+    name: Air Cargo News
+    type: rss
+    url: https://www.aircargonews.net/feed/
+    language: en
+    categories:
+      - air
+    regions:
+      - global
+    fetch_interval_minutes: 30
+    enabled: true
+    priority: 1
+    notes: "Leading air cargo industry publication"
+
+  - source_id: supplychaindive_rss
+    name: Supply Chain Dive
+    type: rss
+    url: https://www.supplychaindive.com/feeds/news/
+    language: en
+    categories:
+      - logistics
+    regions:
+      - global
+    fetch_interval_minutes: 30
+    enabled: true
+    priority: 2
+    notes: "Supply chain briefings"
+
+  - source_id: joc_rss
+    name: "Journal of Commerce (JOC)"
+    type: rss
+    url: https://www.joc.com/rss
+    language: en
+    categories:
+      - ocean
+      - logistics
+    regions:
+      - global
+    fetch_interval_minutes: 30
+    enabled: true
+    priority: 1
+    notes: "IHS Markit, container shipping + ports"
+
+  - source_id: supplychainbrain_rss
+    name: SupplyChainBrain
+    type: rss
+    url: https://www.supplychainbrain.com/rss
+    language: en
+    categories:
+      - logistics
+    regions:
+      - global
+    fetch_interval_minutes: 30
+    enabled: true
+    priority: 2
+    notes: "Broad supply chain coverage"
+
+  - source_id: hellenic_shipping_rss
+    name: Hellenic Shipping News
+    type: rss
+    url: https://www.hellenicshippingnews.com/feed/
+    language: en
+    categories:
+      - ocean
+    regions:
+      - global
+      - europe
+    fetch_interval_minutes: 30
+    enabled: true
+    priority: 2
+    notes: "Dry bulk/tanker, Greek shipowner perspective, free"
