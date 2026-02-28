@@ -13,9 +13,15 @@ httpx>=0.27.0
 
 # Content extraction
 trafilatura>=1.8.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
 
 # Text processing
 langdetect>=1.0.9
+python-dateutil>=2.8.2
+
+# Database migrations
+alembic>=1.13.0
 
 # Scheduling
 apscheduler>=3.10.4
@@ -25,3 +31,6 @@ pyyaml>=6.0.1
 pydantic>=2.6.0
 pydantic-settings>=2.1.0
 python-dotenv>=1.0.0
+
+# Source discovery
+duckduckgo-search>=7.0.0

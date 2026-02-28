@@ -4,6 +4,7 @@ from datetime import datetime
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     ARRAY,
+    BigInteger,
     Boolean,
     DateTime,
     Index,
@@ -86,6 +87,12 @@ class Article(Base):
     urgency: Mapped[str | None] = mapped_column(String(20))
     key_metrics: Mapped[list | None] = mapped_column(JSONB, default=list)
 
+    # Deduplication fingerprints
+    title_simhash: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    content_minhash: Mapped[list | None] = mapped_column(
+        ARRAY(BigInteger), nullable=True
+    )
+
     # Embedding (1024-dim for bge-m3)
     embedding = mapped_column(Vector(1024), nullable=True)
 
@@ -113,6 +120,14 @@ class Article(Base):
         Index("idx_articles_sentiment", "sentiment"),
         Index("idx_articles_urgency", "urgency"),
         Index("idx_articles_status", "processing_status"),
+        Index("idx_articles_title_simhash", "title_simhash"),
+        Index(
+            "idx_articles_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
     )
 
 
@@ -129,3 +144,130 @@ class FetchLog(Base):
     articles_dedup: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text)
     duration_ms: Mapped[int | None] = mapped_column(Integer)
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+
+    # Filter criteria (all optional, acts as AND when multiple set)
+    source_ids: Mapped[list | None] = mapped_column(ARRAY(String(100)))
+    transport_modes: Mapped[list | None] = mapped_column(ARRAY(String(50)))
+    topics: Mapped[list | None] = mapped_column(ARRAY(String(100)))
+    regions: Mapped[list | None] = mapped_column(ARRAY(String(50)))
+    urgency_min: Mapped[str | None] = mapped_column(String(20))  # minimum urgency level
+    languages: Mapped[list | None] = mapped_column(ARRAY(String(10)))
+
+    # Notification channel
+    channel: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # websocket / webhook / email
+    channel_config: Mapped[dict | None] = mapped_column(
+        JSONB, default=dict
+    )  # channel-specific config
+
+    # Frequency
+    frequency: Mapped[str] = mapped_column(
+        String(20), default="realtime"
+    )  # realtime / daily / weekly
+
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class WebhookDeliveryLog(Base):
+    __tablename__ = "webhook_delivery_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    subscription_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
+    article_id: Mapped[str] = mapped_column(String(36), nullable=False)
+
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    status_code: Mapped[int | None] = mapped_column(Integer)
+    success: Mapped[bool] = mapped_column(Boolean, default=False)
+    attempt: Mapped[int] = mapped_column(Integer, default=1)
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+    delivered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class SourceCandidate(Base):
+    """Discovered source candidate pending validation and approval."""
+
+    __tablename__ = "source_candidates"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    url: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(200))
+    feed_url: Mapped[str | None] = mapped_column(Text)
+    source_type: Mapped[str] = mapped_column(
+        String(20), default="universal"
+    )  # rss / scraper / universal
+    language: Mapped[str | None] = mapped_column(String(10))
+    categories: Mapped[list | None] = mapped_column(ARRAY(String(100)), default=list)
+    regions: Mapped[list | None] = mapped_column(ARRAY(String(50)), default=list)
+
+    # Discovery metadata
+    discovered_via: Mapped[str | None] = mapped_column(
+        String(50)
+    )  # web_search / seed_expansion / outbound_link
+    discovery_query: Mapped[str | None] = mapped_column(Text)
+
+    # Validation results
+    status: Mapped[str] = mapped_column(
+        String(20), default="discovered"
+    )  # discovered / validating / validated / approved / rejected
+    quality_score: Mapped[int | None] = mapped_column(Integer)  # 0-100
+    relevance_score: Mapped[int | None] = mapped_column(Integer)  # 0-100
+    validation_details: Mapped[dict | None] = mapped_column(JSONB, default=dict)
+    sample_articles: Mapped[list | None] = mapped_column(
+        JSONB, default=list
+    )  # preview of fetched articles
+    articles_fetched: Mapped[int] = mapped_column(Integer, default=0)
+    fetch_success: Mapped[bool | None] = mapped_column(Boolean)
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+    # Auto-approve threshold
+    auto_approved: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index("idx_candidates_status", "status"),
+        Index("idx_candidates_quality", "quality_score"),
+    )
+
+
+class APIKey(Base):
+    __tablename__ = "api_keys"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    role: Mapped[str] = mapped_column(String(20), default="reader")  # admin / reader
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -30,3 +30,5 @@ pgdata/
 
 # Claude Code
 .claude/
+frontend/node_modules/
+frontend/dist/
