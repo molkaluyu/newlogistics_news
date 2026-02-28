@@ -45,10 +45,11 @@ export const analyticsApi = {
     return api.get<TrendingTopic[]>(`/analytics/trending?${qs}`)
   },
 
-  sentimentTrend: (params: { granularity?: string; transport_mode?: string; topic?: string; region?: string; days?: number } = {}) => {
+  sentimentTrend: async (params: { granularity?: string; transport_mode?: string; topic?: string; region?: string; days?: number } = {}): Promise<SentimentPoint[]> => {
     const qs = new URLSearchParams()
     Object.entries(params).forEach(([k, v]) => { if (v) qs.set(k, String(v)) })
-    return api.get<SentimentPoint[]>(`/analytics/sentiment-trend?${qs}`)
+    const res = await api.get<{ granularity: string; days: number; data_points: SentimentPoint[] }>(`/analytics/sentiment-trend?${qs}`)
+    return res.data_points ?? []
   },
 
   entities: (params: { entity_type?: string; days?: number; limit?: number } = {}) => {
