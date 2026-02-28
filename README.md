@@ -1,5 +1,7 @@
 # Logistics News Collector
 
+[English](README.md) | [中文](README.zh-CN.md)
+
 Global logistics and shipping news intelligence platform. Automatically collects, analyzes, and structures news from 16+ sources (RSS, API, web scraper) across ocean shipping, air cargo, and supply chain media. Features LLM-powered analysis, semantic search, real-time push, trend analytics, and automatic source discovery.
 
 ## Features
