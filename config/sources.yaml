@@ -149,6 +149,63 @@ sources:
 
   # ── Chinese logistics / shipping sources ──
 
+  - source_id: shipping_circle
+    name: "航运界 (Shipping Circle)"
+    type: scraper
+    url: https://www.ship.sh/
+    language: zh
+    categories:
+      - ocean
+    regions:
+      - china
+      - asia
+    fetch_interval_minutes: 60
+    enabled: true
+    priority: 2
+    notes: "Chinese shipping community news and analysis"
+    scraper_config:
+      list_selector: 'a[href^="/articles/"]'
+      max_articles: 20
+
+  - source_id: eworldship
+    name: "国际船舶网 (International Marine)"
+    type: scraper
+    url: https://www.eworldship.com/
+    language: zh
+    categories:
+      - ocean
+    regions:
+      - china
+      - global
+    fetch_interval_minutes: 60
+    enabled: true
+    priority: 2
+    notes: "Shipbuilding, ship trading, and maritime industry news"
+    scraper_config:
+      list_selector: 'a[href*="/html/"]'
+      max_articles: 20
+      ssl_weak: true
+      encoding: gbk
+
+  - source_id: cnss
+    name: "中国船舶服务网 (CNSS)"
+    type: scraper
+    url: https://www.cnss.com.cn/
+    language: zh
+    categories:
+      - ocean
+      - logistics
+    regions:
+      - china
+      - asia
+    fetch_interval_minutes: 60
+    enabled: true
+    priority: 1
+    notes: "China National Shipping Service, replaces china_shipping_gazette"
+    scraper_config:
+      list_selector: "li.news-list-li a"
+      max_articles: 20
+
   - source_id: china_shipping_gazette
     name: "中国航务周刊 (China Shipping Gazette)"
     type: scraper
@@ -161,13 +218,12 @@ sources:
       - china
       - asia
     fetch_interval_minutes: 60
-    enabled: true
+    enabled: false
     priority: 1
-    notes: "Leading Chinese shipping weekly, covers container/bulk/port policy"
+    notes: "DISABLED: Server returns 500 error. Replaced by cnss."
     scraper_config:
       list_selector: ".news-list a"
       max_articles: 20
-      note: "Selector to be refined after inspecting live page structure"
 
   - source_id: sofreight
     name: "搜航网 (Sofreight)"
@@ -182,32 +238,12 @@ sources:
       - china
       - global
     fetch_interval_minutes: 60
-    enabled: true
+    enabled: false
     priority: 1
-    notes: "Major Chinese freight/logistics news aggregator, high volume"
+    notes: "DISABLED: SPA-rendered page, no static content available for scraping."
     scraper_config:
       list_selector: ".news-list a"
       max_articles: 20
-      note: "Selector to be refined after inspecting live page structure"
-
-  - source_id: eworldship
-    name: "国际船舶网 (International Marine)"
-    type: scraper
-    url: https://www.eworldship.com/html/2024/ship_news_index.html
-    language: zh
-    categories:
-      - ocean
-    regions:
-      - china
-      - global
-    fetch_interval_minutes: 60
-    enabled: true
-    priority: 2
-    notes: "Shipbuilding, ship trading, and maritime industry news"
-    scraper_config:
-      list_selector: ".news-list a"
-      max_articles: 20
-      note: "Selector to be refined after inspecting live page structure"
 
   - source_id: chinawuliu
     name: "中国物流与采购网 (China Federation of Logistics & Purchasing)"
@@ -219,13 +255,12 @@ sources:
     regions:
       - china
     fetch_interval_minutes: 60
-    enabled: true
+    enabled: false
     priority: 1
-    notes: "Official CFLP site, logistics policy and industry data"
+    notes: "DISABLED: SSL certificate error + 502 gateway error."
     scraper_config:
       list_selector: ".news-list a"
       max_articles: 20
-      note: "Selector to be refined after inspecting live page structure"
 
   - source_id: yunlink
     name: "运联智库 (YunLink)"
@@ -238,29 +273,9 @@ sources:
     regions:
       - china
     fetch_interval_minutes: 60
-    enabled: true
+    enabled: false
     priority: 2
-    notes: "Domestic logistics and road freight intelligence"
+    notes: "DISABLED: Domain ylzk.cn is incorrect/unreachable."
     scraper_config:
       list_selector: ".news-list a"
       max_articles: 20
-      note: "Selector to be refined after inspecting live page structure"
-
-  - source_id: shipping_circle
-    name: "航运界 (Shipping Circle)"
-    type: scraper
-    url: https://www.ship.sh/news/list.html
-    language: zh
-    categories:
-      - ocean
-    regions:
-      - china
-      - asia
-    fetch_interval_minutes: 60
-    enabled: true
-    priority: 2
-    notes: "Chinese shipping community news and analysis"
-    scraper_config:
-      list_selector: ".news-list a"
-      max_articles: 20
-      note: "Selector to be refined after inspecting live page structure"
