@@ -83,6 +83,7 @@ class ScraperAdapter(BaseAdapter):
         self.max_articles: int = int(
             scraper_cfg.get("max_articles", _DEFAULT_MAX_ARTICLES)
         )
+        self.encoding: str | None = scraper_cfg.get("encoding")
 
     # ------------------------------------------------------------------
     # Public interface
@@ -128,6 +129,16 @@ class ScraperAdapter(BaseAdapter):
         return articles
 
     # ------------------------------------------------------------------
+    # Helpers: decode response with optional encoding override
+    # ------------------------------------------------------------------
+
+    def _decode_response(self, response: "httpx.Response") -> str:
+        """Decode response body, using configured encoding if set."""
+        if self.encoding:
+            return response.content.decode(self.encoding, errors="replace")
+        return response.text
+
+    # ------------------------------------------------------------------
     # Index page: discover links
     # ------------------------------------------------------------------
 
@@ -140,7 +151,8 @@ class ScraperAdapter(BaseAdapter):
             logger.error(f"Failed to fetch index page {self.index_url}: {e}")
             return []
 
-        soup = BeautifulSoup(response.text, "lxml")
+        html = self._decode_response(response)
+        soup = BeautifulSoup(html, "lxml")
         elements = soup.select(self.list_selector)
 
         seen_urls: set[str] = set()
@@ -183,7 +195,7 @@ class ScraperAdapter(BaseAdapter):
             logger.debug(f"Failed to fetch article page {url}: {e}")
             return None
 
-        html = response.text
+        html = self._decode_response(response)
         soup = BeautifulSoup(html, "lxml")
 
         # --- title ---
